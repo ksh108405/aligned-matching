@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import torch
 import numpy as np
-from get_detected_info import get_anchor_nums, get_anchor_box_size
+from utils.get_detected_info import get_anchor_nums, get_anchor_box_size
 
 prior_info = 0
 
@@ -25,8 +25,8 @@ def center_size(boxes):
     Return:
         boxes: (tensor) Converted xmin, ymin, xmax, ymax form of boxes.
     """
-    return torch.cat((boxes[:, 2:] + boxes[:, :2])/2,  # cx, cy
-                     boxes[:, 2:] - boxes[:, :2], 1)  # w, h
+    return torch.cat((boxes[:, :2],  # cx, cy
+                      boxes[:, 2:]), 1)  # w, h
 
 
 def intersect(box_a, box_b):
@@ -145,7 +145,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     Return:
         The matched indices corresponding to 1)location and 2)confidence preds.
     """
-    global prior_size
+    global prior_sizes
     global prior_info
 
     # jaccard index
