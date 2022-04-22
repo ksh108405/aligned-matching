@@ -23,17 +23,15 @@ def str2bool(v):
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
 train_set = parser.add_mutually_exclusive_group()
-parser.add_argument('--dataset', default='VOC', choices=['VOC', 'COCO'],
-                    type=str, help='VOC or COCO')
-parser.add_argument('--dataset_root', default=VOC_ROOT,
-                    help='Dataset root directory path')
+parser.add_argument('--dataset', default='VOC', choices=['VOC', 'COCO', 'TT100K'],
+                    type=str, help='VOC or COCO or TT100K')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
                     help='Pretrained base model')
 parser.add_argument('--batch_size', default=32, type=int,
                     help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str,
                     help='Checkpoint state_dict file to resume training from')
-parser.add_argument('--start_iter', default=0, type=int,
+parser.add_argument('--start_iter', default=1, type=int,
                     help='Resume training at this iter')
 parser.add_argument('--num_workers', default=4, type=int,
                     help='Number of workers used in dataloading')
@@ -51,6 +49,14 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='weights/',
                     help='Directory for saving checkpoint models')
+parser.add_argument('--weight_name', default='None_',
+                    help='Saved weight name')
+parser.add_argument('--matching_strategy', default='legacy', choices=['legacy', 'aligned'],
+                    help='Select matching strategy (legacy or aligned)')
+parser.add_argument('--train_set', default='trainval',
+                    help='used for divide train or test')
+parser.add_argument('--optimizer', default='SGD', choices=['SGD', 'Adam'],
+                    help='Whether to use SGD or Adam optimizer.')
 args = parser.parse_args()
 
 
@@ -69,30 +75,31 @@ if not os.path.exists(args.save_folder):
 
 
 def train():
-    if args.dataset == 'COCO':
-        if args.dataset_root == VOC_ROOT:
-            if not os.path.exists(COCO_ROOT):
-                parser.error('Must specify dataset_root if specifying dataset')
-            print("WARNING: Using default COCO dataset_root because " +
-                  "--dataset_root was not specified.")
-            args.dataset_root = COCO_ROOT
-        cfg = coco
-        dataset = COCODetection(root=args.dataset_root,
-                                transform=SSDAugmentation(cfg['min_dim'],
-                                                          MEANS))
-    elif args.dataset == 'VOC':
-        if args.dataset_root == COCO_ROOT:
-            parser.error('Must specify dataset if specifying dataset_root')
+    if args.dataset == 'VOC':
         cfg = voc
-        dataset = VOCDetection(root=args.dataset_root,
-                               transform=SSDAugmentation(cfg['min_dim'],
-                                                         MEANS))
+        image_sets = [('2007', args.train_set), ('2012', args.train_set)]
+        dataset = VOCDetection(root=VOC_ROOT, image_sets=image_sets,
+                               transform=SSDAugmentation(cfg['min_dim'], MEANS))
+    elif args.dataset == 'TT100K':
+        cfg = tt100k
+        image_sets = args.train_set
+        if args.train_set == 'trainval':
+            image_sets = 'train'
+        dataset = TT100KDetection(root=TT100K_ROOT, image_sets=image_sets,
+                                  transform=SSDAugmentation(cfg['min_dim'], MEANS))
+    elif args.dataset == 'COCO':
+        cfg = coco
+        dataset = COCODetection(root=COCO_ROOT,
+                                transform=SSDAugmentation(cfg['min_dim'], MEANS))
+    else:
+        raise Exception('Select on VOC or TT100K or COCO.')
 
     if args.visdom:
         import visdom
+        global viz
         viz = visdom.Visdom()
 
-    ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
+    ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'], args.dataset)
     net = ssd_net
 
     if args.cuda:
@@ -117,10 +124,15 @@ def train():
         ssd_net.loc.apply(weights_init)
         ssd_net.conf.apply(weights_init)
 
-    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
-                          weight_decay=args.weight_decay)
+    if args.optimizer == 'SGD':
+        optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
+                              weight_decay=args.weight_decay)
+    elif args.optimizer == 'Adam':
+        optimizer = optim.Adam(net.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08,
+                               weight_decay=args.weight_decay,
+                               amsgrad=True)  # use adam for tt100k training
     criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
-                             False, args.cuda)
+                             False, args.cuda, matching=args.matching_strategy)
 
     net.train()
     # loss counters
@@ -162,7 +174,11 @@ def train():
             adjust_learning_rate(optimizer, args.gamma, step_index)
 
         # load train data
-        images, targets = next(batch_iterator)
+        try:
+            images, targets = next(batch_iterator)
+        except StopIteration:
+            batch_iterator = iter(data_loader)
+            images, targets = next(batch_iterator)
 
         if args.cuda:
             images = Variable(images.cuda())
@@ -180,10 +196,10 @@ def train():
         loss.backward()
         optimizer.step()
         t1 = time.time()
-        loc_loss += loss_l.data[0]
-        conf_loss += loss_c.data[0]
+        loc_loss += loss_l.data
+        conf_loss += loss_c.data
 
-        if iteration % 10 == 0:
+        if iteration % 1 == 0:
             print('timer: %.4f sec.' % (t1 - t0))
             print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
 
@@ -191,12 +207,14 @@ def train():
             update_vis_plot(iteration, loss_l.data[0], loss_c.data[0],
                             iter_plot, epoch_plot, 'append')
 
-        if iteration != 0 and iteration % 5000 == 0:
+        if iteration != 0 and iteration % 10000 == 0:
             print('Saving state, iter:', iteration)
-            torch.save(ssd_net.state_dict(), 'weights/ssd300_COCO_' +
-                       repr(iteration) + '.pth')
+            weight_path = args.save_folder + args.weight_name + '_' + repr(iteration)
+            while os.path.isfile(weight_path + '.pth'):
+                weight_path += '_add'
+            torch.save(ssd_net.state_dict(), weight_path + '.pth')
     torch.save(ssd_net.state_dict(),
-               args.save_folder + '' + args.dataset + '.pth')
+               args.save_folder + args.weight_name + '_full.pth')
 
 
 def adjust_learning_rate(optimizer, gamma, step):

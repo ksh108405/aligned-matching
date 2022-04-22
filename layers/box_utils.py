@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import torch
-
+import numpy as np
+from get_detected_info import get_anchor_nums, get_anchor_box_size
 
 def point_form(boxes):
     """ Convert prior_boxes to (xmin, ymin, xmax, ymax)
@@ -67,8 +68,64 @@ def jaccard(box_a, box_b):
     union = area_a + area_b - inter
     return inter / union  # [A,B]
 
+def aligned_matching(overlap, truths, threshold):
+    prior_overlaps, prior_idx = overlap.sort(1, descending=True)
 
-def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
+    best_prior_overlap = []
+    best_prior_idx = []
+
+    for i in range(prior_overlaps.shape[0]):
+        prior_overlaps_cpu = prior_overlaps[i].cpu().numpy()
+        prior_idx_cpu = prior_idx[i].cpu().numpy()
+        truths_cpu = truths[i].cpu().numpy()
+
+        # 일정수준으로 IoU가 같은 default box만 남김
+        max_prior_overlap = prior_overlaps_cpu[0]
+        for i, prior_overlap in enumerate(prior_overlaps_cpu):
+            if max_prior_overlap > prior_overlap + threshold:
+                break
+        prior_overlaps_cpu = prior_overlaps_cpu[0:i]
+        prior_idx_cpu = prior_idx_cpu[0:i]
+
+        # gt와 가장 비슷한 ratio의 default box만 선택
+        allowed_priors = []
+        ratio_list = [1, -100, 2, 0.5, 3, 1/3]
+        truth_ratio = (truths_cpu[2] - truths_cpu[0]) / (truths_cpu[3] - truths_cpu[1])
+        gt_ratios = np.abs(np.array(ratio_list) - truth_ratio).argmin()
+        for i, prior_id in enumerate(prior_idx_cpu):
+            if get_anchor_box_size(prior_id) == gt_ratios:
+                allowed_priors.append(i)
+            else:
+                anchor_size_list, accumulated_slice_list = get_anchor_nums()  # 해당 디폴트 박스에 속한 레이어가 가진 디폴트박스의 종류 계산
+                for j, accumulated_slice in enumerate(accumulated_slice_list):
+                    if prior_id < accumulated_slice:
+                        break
+                if (anchor_size_list[j] - 1) < gt_ratios:  # ratio가 범위를 벗어났을 경우 (예: 1:3, 3:1 디폴트박스가 없는 레이어인 경우)
+                    if get_anchor_box_size(prior_id) % 2 == gt_ratios % 2:  # 3:1 gt에 2:1 디폴트박스 매칭, 1:3 gt에 1:2 디폴트박스 매칭
+                        allowed_priors.append(i)
+
+        if allowed_priors:
+            prior_overlaps_cpu_temp = []
+            prior_idx_cpu_temp = []
+            for allowed_prior in allowed_priors:
+                prior_overlaps_cpu_temp.append(prior_overlaps_cpu[allowed_prior])
+                prior_idx_cpu_temp.append(prior_idx_cpu[allowed_prior])
+            prior_overlaps_cpu = prior_overlaps_cpu_temp
+            prior_idx_cpu = prior_idx_cpu_temp
+
+        # 남은 default box 중 gt와 가장 center가 비슷한 것 선택
+        center_sizes = prior_sizes[prior_idx_cpu]
+        truth_cx = (truths_cpu[2] + truths_cpu[0]) / 2
+        truth_cy = (truths_cpu[3] + truths_cpu[1]) / 2
+        center_dist = np.sqrt(np.power(center_sizes[:, 0] - truth_cx, 2) + np.power(center_sizes[:, 1] - truth_cy, 2))
+        idx = np.argmin(center_dist)
+        best_prior_overlap.append([prior_overlaps_cpu[idx]])
+        best_prior_idx.append([prior_idx_cpu[idx]])
+    best_prior_overlap = torch.tensor(best_prior_overlap)
+    best_prior_idx = torch.tensor(best_prior_idx)
+    return best_prior_overlap, best_prior_idx
+
+def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matching):
     """Match each prior box with the ground truth box of the highest jaccard
     overlap, encode the bounding boxes, then return the matched indices
     corresponding to both confidence and location preds.
@@ -82,6 +139,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
         loc_t: (tensor) Tensor to be filled w/ endcoded location targets.
         conf_t: (tensor) Tensor to be filled w/ matched indices for conf preds.
         idx: (int) current batch index
+        matching: (string) Method to match. 'legacy' or 'aligned'
     Return:
         The matched indices corresponding to 1)location and 2)confidence preds.
     """
@@ -92,7 +150,10 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
     )
     # (Bipartite Matching)
     # [1,num_objects] best prior for each ground truth
-    best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
+    if matching == 'legacy':
+        best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
+    elif matching == 'new':
+        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6)  # use new matching strategy
     # [1,num_priors] best ground truth for each prior
     best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
     best_truth_idx.squeeze_(0)

@@ -1,5 +1,5 @@
 from .voc0712 import VOCDetection, VOCAnnotationTransform, VOC_CLASSES, VOC_ROOT
-
+from .tt100k import TT100KDetection, TT100KAnnotationTransform, TT100K_CLASSES, TT100K_ROOT
 from .coco import COCODetection, COCOAnnotationTransform, COCO_CLASSES, COCO_ROOT, get_label_map
 from .config import *
 import torch

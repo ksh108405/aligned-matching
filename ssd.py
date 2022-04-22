@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import voc, coco
+from data import voc, coco, tt100k
 import os
 
 
@@ -25,11 +25,22 @@ class SSD(nn.Module):
         head: "multibox head" consists of loc and conf conv layers
     """
 
-    def __init__(self, phase, size, base, extras, head, num_classes):
+    def __init__(self, phase, size, base, extras, head, num_classes, cfg):
         super(SSD, self).__init__()
         self.phase = phase
         self.num_classes = num_classes
-        self.cfg = (coco, voc)[num_classes == 21]
+
+        if cfg == 'VOC':
+            self.cfg = voc
+        elif cfg == 'TT100K':
+            self.cfg = tt100k
+        elif cfg == 'COCO':
+            self.cfg = coco
+        else:
+            print('Please specify correct config file!')
+            print('continuing with voc config...')
+            self.cfg = voc
+
         self.priorbox = PriorBox(self.cfg)
         self.priors = Variable(self.priorbox.forward(), volatile=True)
         self.size = size
@@ -162,6 +173,48 @@ def add_extras(cfg, i, batch_norm=False):
         in_channels = v
     return layers
 
+def add_extras_512(in_channels):
+    # Extra layers added to VGG for feature scaling
+    layers = []
+
+    # add additional convolutional layers.
+
+    # conv6
+    # 16 x 16
+    layers += [nn.Conv2d(in_channels, out_channels=256, kernel_size=1, padding=0, stride=1)]
+    in_channels = 256
+    layers += [nn.Conv2d(in_channels, out_channels=512, kernel_size=3, padding=1, stride=2)]
+    in_channels = 512
+
+    # conv7
+    # 8 x 8
+    layers += [nn.Conv2d(in_channels, out_channels=128, kernel_size=1, padding=0, stride=1)]
+    in_channels = 128
+    layers += [nn.Conv2d(in_channels, out_channels=256, kernel_size=3, padding=1, stride=2)]
+    in_channels = 256
+
+    # conv8
+    # 4 x 4
+    layers += [nn.Conv2d(in_channels, out_channels=128, kernel_size=1, padding=0, stride=1)]
+    in_channels = 128
+    layers += [nn.Conv2d(in_channels, out_channels=256, kernel_size=3, padding=1, stride=2)]
+    in_channels = 256
+
+    # conv9
+    # 2 x 2
+    layers += [nn.Conv2d(in_channels, out_channels=128, kernel_size=1, padding=0, stride=1)]
+    in_channels = 128
+    layers += [nn.Conv2d(in_channels, out_channels=256, kernel_size=3, padding=1, stride=2)]
+    in_channels = 256
+
+    # conv10
+    # 1 x 1
+    layers += [nn.Conv2d(in_channels, out_channels=128, kernel_size=1, padding=0, stride=1)]
+    in_channels = 128
+    layers += [nn.Conv2d(in_channels, out_channels=256, kernel_size=4, padding=1, stride=1)]
+    in_channels = 256
+
+    return layers
 
 def multibox(vgg, extra_layers, cfg, num_classes):
     loc_layers = []
@@ -183,7 +236,8 @@ def multibox(vgg, extra_layers, cfg, num_classes):
 base = {
     '300': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
             512, 512, 512],
-    '512': [],
+    '512': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
+            512, 512, 512],
 }
 extras = {
     '300': [256, 'S', 512, 128, 'S', 256, 128, 256, 128, 256],
@@ -191,19 +245,24 @@ extras = {
 }
 mbox = {
     '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
-    '512': [],
+    '512': [4, 6, 6, 6, 6, 4, 4]
 }
 
 
-def build_ssd(phase, size=300, num_classes=21):
+def build_ssd(phase, size=512, num_classes=21, cfg=None):
     if phase != "test" and phase != "train":
         print("ERROR: Phase: " + phase + " not recognized")
         return
-    if size != 300:
+    if size != 300 and size != 512:
         print("ERROR: You specified size " + repr(size) + ". However, " +
-              "currently only SSD300 (size=300) is supported!")
+              "currently only SSD300 (size=300) and SSD512 (size=512) are supported!")
         return
-    base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
-                                     add_extras(extras[str(size)], 1024),
-                                     mbox[str(size)], num_classes)
-    return SSD(phase, size, base_, extras_, head_, num_classes)
+    if size == 300:
+        base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
+                                         add_extras(extras[str(size)], 1024),
+                                         mbox[str(size)], num_classes)
+    elif size == 512:
+        base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
+                                         add_extras_512(1024),
+                                         mbox[str(size)], num_classes)
+    return SSD(phase, size, base_, extras_, head_, num_classes, cfg)
