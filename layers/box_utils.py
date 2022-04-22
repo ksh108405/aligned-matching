@@ -3,6 +3,8 @@ import torch
 import numpy as np
 from get_detected_info import get_anchor_nums, get_anchor_box_size
 
+prior_info = 0
+
 def point_form(boxes):
     """ Convert prior_boxes to (xmin, ymin, xmax, ymax)
     representation for comparison to point form ground truth data.
@@ -143,16 +145,26 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     Return:
         The matched indices corresponding to 1)location and 2)confidence preds.
     """
+    global prior_size
+    global prior_info
+
     # jaccard index
     overlaps = jaccard(
         truths,
         point_form(priors)
     )
+
+    if prior_info == 0:  # at first execution of match
+        prior_sizes = center_size(priors).cpu().numpy()
+        prior_info = []
+        for i in range(len(priors)):
+            prior_info.append(get_anchor_box_size(i))
+
     # (Bipartite Matching)
     # [1,num_objects] best prior for each ground truth
     if matching == 'legacy':
         best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
-    elif matching == 'new':
+    elif matching == 'aligned':
         best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6)  # use new matching strategy
     # [1,num_priors] best ground truth for each prior
     best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)

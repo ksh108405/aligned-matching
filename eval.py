@@ -9,8 +9,9 @@ import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
-from data import VOC_ROOT, VOCAnnotationTransform, VOCDetection, BaseTransform
-from data import VOC_CLASSES as labelmap
+from data import VOC_ROOT, VOCAnnotationTransform, VOCDetection, VOC_CLASSES
+from data import TT100K_ROOT, TT100KAnnotationTransform, TT100KDetection, TT100K_CLASSES
+from data import BaseTransform
 import torch.utils.data as data
 
 from ssd import build_ssd
@@ -22,6 +23,7 @@ import argparse
 import numpy as np
 import pickle
 import cv2
+import shutil
 
 if sys.version_info[0] == 2:
     import xml.etree.cElementTree as ET
@@ -50,6 +52,10 @@ parser.add_argument('--voc_root', default=VOC_ROOT,
                     help='Location of VOC root directory')
 parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
+parser.add_argument('--network_size', default=512, type=int,
+                    help='SSD network size (only 300 and 512 are supported)')
+parser.add_argument('--test_set', default='test', type=str,
+                    help='tt100k test set name')
 
 args = parser.parse_args()
 
@@ -66,14 +72,24 @@ if torch.cuda.is_available():
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
-annopath = os.path.join(args.voc_root, 'VOC2007', 'Annotations', '%s.xml')
-imgpath = os.path.join(args.voc_root, 'VOC2007', 'JPEGImages', '%s.jpg')
-imgsetpath = os.path.join(args.voc_root, 'VOC2007', 'ImageSets',
-                          'Main', '{:s}.txt')
-YEAR = '2007'
-devkit_path = args.voc_root + 'VOC' + YEAR
-dataset_mean = (104, 117, 123)
-set_type = 'test'
+if args.dataset == 'VOC':
+    annopath = os.path.join(VOC_ROOT, 'VOC2007', 'Annotations', '%s.xml')
+    imgpath = os.path.join(VOC_ROOT, 'VOC2007', 'JPEGImages', '%s.jpg')
+    imgsetpath = os.path.join(VOC_ROOT, 'VOC2007', 'ImageSets', 'Main', '{:s}.txt')
+    YEAR = '2007'
+    dataset_path = VOC_ROOT + 'VOC' + YEAR
+    dataset_mean = (104, 117, 123)
+    set_type = 'test'
+elif args.dataset == 'TT100K':
+    annopath = os.path.join(TT100K_ROOT, 'annotations_5classes', '%s.xml')
+    imgpath = os.path.join(TT100K_ROOT, 'all_img', '%s.jpg')
+    test_set = args.test_set + '.txt'
+    imgsetpath = os.path.join(TT100K_ROOT, test_set)
+    dataset_path = TT100K_ROOT
+    dataset_mean = (104, 117, 123)
+    set_type = 'test'
+else:
+    raise Exception('Please specify correct dataset name!')
 
 
 class Timer(object):
@@ -419,16 +435,42 @@ def evaluate_detections(box_list, output_dir, dataset):
 
 
 if __name__ == '__main__':
+    if args.cleanup:
+        folder_list = ["/annotations_cache", "/results", "/detection_caches"]
+        for folder_name in folder_list:
+            folder = dataset_path + folder_name
+            for filename in os.listdir(folder):
+                file_path = os.path.join(folder, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as e:
+                    print('Failed to delete %s. Reason: %s' % (file_path, e))
     # load net
+    if args.dataset == 'VOC':
+        labelmap = VOC_CLASSES
+        dataset_root = VOC_ROOT
+    elif args.dataset == 'TT100K':
+        labelmap = TT100K_CLASSES
+        dataset_root = TT100K_ROOT
+    else:
+        raise Exception('Please specify correct dataset name!')
     num_classes = len(labelmap) + 1                      # +1 for background
-    net = build_ssd('test', 300, num_classes)            # initialize SSD
+    net = build_ssd('test', args.network_size, num_classes, cfg=args.dataset)            # initialize SSD
     net.load_state_dict(torch.load(args.trained_model))
     net.eval()
     print('Finished loading model!')
     # load data
-    dataset = VOCDetection(args.voc_root, [('2007', set_type)],
-                           BaseTransform(300, dataset_mean),
-                           VOCAnnotationTransform())
+    if args.dataset == 'VOC':
+        dataset = VOCDetection(dataset_root, [('2007', set_type)],
+                               BaseTransform(args.network_size, dataset_mean),
+                               VOCAnnotationTransform())
+    elif args.dataset == 'TT100K':
+        dataset = TT100KDetection(dataset_root, args.test_set,
+                                  BaseTransform(args.network_size, dataset_mean),
+                                  TT100KAnnotationTransform())
     if args.cuda:
         net = net.cuda()
         cudnn.benchmark = True
