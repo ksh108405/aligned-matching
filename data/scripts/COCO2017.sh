@@ -35,10 +35,10 @@ curl -LO http://images.cocodataset.org/zips/train2017.zip
 echo "Downloading MSCOCO val images ..."
 curl -LO http://images.cocodataset.org/zips/val2017.zip
 echo "Downloading MSCOCO test images ..."
-curl -LO http://images.cocodataset.org/zips/test2017.zip
+# curl -LO http://images.cocodataset.org/zips/test2017.zip
 
 cd ../
-if [ ! -d annotations]
+if [ ! -d ./annotations ]
   then
     mkdir -p ./annotations
 fi
@@ -50,19 +50,19 @@ curl -LO http://images.cocodataset.org/annotations/annotations_trainval2017.zip
 echo "Finished downloading. Now extracting ..."
 
 # Unzip data
+sudo apt-get install unzip
+
 echo "Extracting train images ..."
 unzip ../images/train2017.zip -d ../images
 echo "Extracting val images ..."
 unzip ../images/val2017.zip -d ../images
+echo "Extracting test images ..."
+unzip ../images/test2017.zip -d ../images
 echo "Extracting annotations ..."
 unzip ./annotations_trainval2017.zip
-
-echo "Removing zip files ..."
-rm ../images/train2017.zip
-rm ../images/val2017.zip
-rm ./annotations_trainval2017.zip
 
 end=`date +%s`
 runtime=$((end-start))
 
 echo "Completed in " $runtime " seconds"
+echo "Reminder : Remove zip files if unneeded."
