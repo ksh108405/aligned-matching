@@ -48,14 +48,14 @@ parser.add_argument('--top_k', default=5, type=int,
                     help='Further restrict the number of predictions to parse')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use cuda to train model')
-parser.add_argument('--voc_root', default=VOC_ROOT,
-                    help='Location of VOC root directory')
+parser.add_argument('--dataset', default=VOC_ROOT,
+                    help='Name of dataset to evaluate')
 parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
 parser.add_argument('--network_size', default=512, type=int,
                     help='SSD network size (only 300 and 512 are supported)')
 parser.add_argument('--test_set', default='test', type=str,
-                    help='tt100k test set name')
+                    help='TT100K test set name')
 
 args = parser.parse_args()
 
@@ -124,8 +124,8 @@ def parse_rec(filename):
     for obj in tree.findall('object'):
         obj_struct = {}
         obj_struct['name'] = obj.find('name').text
-        obj_struct['pose'] = obj.find('pose').text
-        obj_struct['truncated'] = int(obj.find('truncated').text)
+        # obj_struct['pose'] = obj.find('pose').text
+        # obj_struct['truncated'] = int(obj.find('truncated').text)
         obj_struct['difficult'] = int(obj.find('difficult').text)
         bbox = obj.find('bndbox')
         obj_struct['bbox'] = [int(bbox.find('xmin').text) - 1,
@@ -152,7 +152,7 @@ def get_output_dir(name, phase):
 def get_voc_results_file_template(image_set, cls):
     # VOCdevkit/VOC2007/results/det_test_aeroplane.txt
     filename = 'det_' + image_set + '_%s.txt' % (cls)
-    filedir = os.path.join(devkit_path, 'results')
+    filedir = os.path.join(dataset_path, 'results')
     if not os.path.exists(filedir):
         os.makedirs(filedir)
     path = os.path.join(filedir, filename)
@@ -177,7 +177,7 @@ def write_voc_results_file(all_boxes, dataset):
 
 
 def do_python_eval(output_dir='output', use_07=True):
-    cachedir = os.path.join(devkit_path, 'annotations_cache')
+    cachedir = os.path.join(dataset_path, 'annotations_cache')
     aps = []
     # The PASCAL VOC metric changed in 2010
     use_07_metric = use_07
@@ -191,14 +191,14 @@ def do_python_eval(output_dir='output', use_07=True):
            ovthresh=0.5, use_07_metric=use_07_metric)
         aps += [ap]
         print('AP for {} = {:.4f}'.format(cls, ap))
-        with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
+        with open(os.path.join(dataset_path, 'detection_caches', cls + '_pr.pkl'), 'wb') as f:
             pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
     print('Mean AP = {:.4f}'.format(np.mean(aps)))
     print('~~~~~~~~')
     print('Results:')
     for ap in aps:
-        print('{:.3f}'.format(ap))
-    print('{:.3f}'.format(np.mean(aps)))
+        print('{:.4f}'.format(ap))
+    print('{:.4f}'.format(np.mean(aps)))
     print('~~~~~~~~')
     print('')
     print('--------------------------------------------------------------')
@@ -388,8 +388,8 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 
     # timers
     _t = {'im_detect': Timer(), 'misc': Timer()}
-    output_dir = get_output_dir('ssd300_120000', set_type)
-    det_file = os.path.join(output_dir, 'detections.pkl')
+    output_dir = get_output_dir('output', set_type)
+    det_file = os.path.join(dataset_path, 'detection_caches', 'detections.pkl')
 
     for i in range(num_images):
         im, gt, h, w = dataset.pull_item(i)
