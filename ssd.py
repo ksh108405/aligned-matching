@@ -29,18 +29,7 @@ class SSD(nn.Module):
         super(SSD, self).__init__()
         self.phase = phase
         self.num_classes = num_classes
-
-        if cfg == 'VOC':
-            self.cfg = voc
-        elif cfg == 'TT100K':
-            self.cfg = tt100k
-        elif cfg == 'COCO':
-            self.cfg = coco
-        else:
-            print('Please specify correct config file!')
-            print('continuing with voc config...')
-            self.cfg = voc
-
+        self.cfg = cfg
         self.priorbox = PriorBox(self.cfg)
         with torch.no_grad():
             self.priors = Variable(self.priorbox.forward())
@@ -248,6 +237,7 @@ extras = {
 mbox = {
     '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
     '512': [4, 6, 6, 6, 6, 4, 4]
+    # '512': [5, 7, 7, 7, 7, 5, 5]  # If and only if 'half_sized' = True
 }
 
 
@@ -259,12 +249,29 @@ def build_ssd(phase, size=512, num_classes=21, cfg=None):
         print("ERROR: You specified size " + repr(size) + ". However, " +
               "currently only SSD300 (size=300) and SSD512 (size=512) are supported!")
         return
+
+    if cfg == 'VOC':
+        cfg = voc
+    elif cfg == 'TT100K':
+        cfg = tt100k
+    elif cfg == 'COCO':
+        cfg = coco
+    else:
+        print('Please specify correct config file!')
+        print('continuing with voc config...')
+        cfg = voc
+
+    if cfg['half_sized']:
+        model_mbox = [i+1 for i in mbox[str(size)]]
+    else:
+        model_mbox = mbox[str(size)]
+
     if size == 300:
         base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
                                          add_extras(extras[str(size)], 1024),
-                                         mbox[str(size)], num_classes)
+                                         model_mbox, num_classes)
     elif size == 512:
         base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
                                          add_extras_512(1024),
-                                         mbox[str(size)], num_classes)
+                                         model_mbox, num_classes)
     return SSD(phase, size, base_, extras_, head_, num_classes, cfg)
