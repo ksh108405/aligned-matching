@@ -151,6 +151,12 @@ def train():
 
     step_index = 0
 
+    # adjust lr on resuming training
+    if args.start_iter != 1:
+        lr_adjusted = False
+    else:
+        lr_adjusted = True
+
     if args.visdom:
         vis_title = 'SSD.PyTorch on ' + dataset.name
         vis_legend = ['Loc Loss', 'Conf Loss', 'Total Loss']
@@ -173,11 +179,12 @@ def train():
             epoch += 1
 
         # adjust lr on resuming training
-        if args.start_iter != 1:
+        if not lr_adjusted:
             for i, lr_step in enumerate(reversed(cfg['lr_steps'])):
                 if iteration > lr_step:
                     step_index = len(cfg['lr_steps']) - i
                     adjust_learning_rate(optimizer, args.gamma, step_index)
+                    lr_adjusted = True
                     break
 
         if iteration in cfg['lr_steps']:
