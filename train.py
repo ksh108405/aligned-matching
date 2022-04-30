@@ -169,6 +169,14 @@ def train():
             conf_loss = 0
             epoch += 1
 
+        # adjust lr on resuming training
+        if args.start_iter != 1:
+            for i, lr_step in enumerate(reversed(cfg['lr_steps'])):
+                if iteration > lr_step:
+                    step_index = len(cfg['lr_steps']) - i
+                    adjust_learning_rate(optimizer, args.gamma, step_index)
+                    break
+
         if iteration in cfg['lr_steps']:
             step_index += 1
             adjust_learning_rate(optimizer, args.gamma, step_index)
