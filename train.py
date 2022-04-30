@@ -14,6 +14,7 @@ import torch.nn.init as init
 import torch.utils.data as data
 import numpy as np
 import argparse
+from torchinfo import summary
 
 
 def str2bool(v):
@@ -100,6 +101,7 @@ def train():
         viz = visdom.Visdom()
 
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'], args.dataset)
+    summary(ssd_net, input_size=(args.batch_size, 3, cfg['min_dim'], cfg['min_dim']), device='cuda')
     net = ssd_net
 
     if args.cuda:
@@ -135,6 +137,7 @@ def train():
                              False, args.cuda, matching=args.matching_strategy)
 
     net.train()
+
     # loss counters
     loc_loss = 0
     conf_loss = 0

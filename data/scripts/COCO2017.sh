@@ -35,7 +35,7 @@ curl -LO http://images.cocodataset.org/zips/train2017.zip
 echo "Downloading MSCOCO val images ..."
 curl -LO http://images.cocodataset.org/zips/val2017.zip
 echo "Downloading MSCOCO test images ..."
-# curl -LO http://images.cocodataset.org/zips/test2017.zip
+curl -LO http://images.cocodataset.org/zips/test2017.zip
 
 cd ../
 if [ ! -d ./annotations ]

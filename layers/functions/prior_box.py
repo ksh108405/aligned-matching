@@ -21,6 +21,7 @@ class PriorBox(object):
         self.aspect_ratios = cfg['aspect_ratios']
         self.clip = cfg['clip']
         self.version = cfg['name']
+        self.half_sized = cfg['half_sized']
         for v in self.variance:
             if v <= 0:
                 raise ValueError('Variances must be greater than 0')
@@ -43,6 +44,12 @@ class PriorBox(object):
                 # rel size: sqrt(s_k * s_(k+1))
                 s_k_prime = sqrt(s_k * (self.max_sizes[k]/self.image_size))
                 mean += [cx, cy, s_k_prime, s_k_prime]
+
+                if self.half_sized:
+                    # aspect_ratio: 1
+                    # rel size: 0.5 * min_size
+                    s_k_2prime = 0.5 * self.min_sizes[k]/self.image_size
+                    mean += [cx, cy, s_k_2prime, s_k_2prime]
 
                 # rest of aspect ratios
                 for ar in self.aspect_ratios[k]:
