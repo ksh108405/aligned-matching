@@ -220,8 +220,7 @@ def train():
         conf_loss += loss_c.data
 
         if iteration % 1 == 0:
-            print('timer: %.4f sec.' % (t1 - t0))
-            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data), end=' ')
+            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data) + ' timer: %.4f sec.' % (t1 - t0))
 
         if args.visdom:
             update_vis_plot(iteration, loss_l.data, loss_c.data,
@@ -244,6 +243,7 @@ def adjust_learning_rate(optimizer, gamma, step):
     # https://github.com/pytorch/examples/blob/master/imagenet/main.py
     """
     lr = args.lr * (gamma ** (step))
+    print(f'adjusting learning rate to {lr}')
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
