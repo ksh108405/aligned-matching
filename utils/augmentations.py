@@ -52,6 +52,9 @@ class Compose(object):
             img, boxes, labels = t(img, boxes, labels)
         return img, boxes, labels
 
+    def print(self):
+        return self.transforms
+
 
 class Lambda(object):
     """Applies a lambda as a transform."""
@@ -421,6 +424,7 @@ class SSDAugmentation(object):
                 Resize(self.size),
                 SubtractMeans(self.mean)
             ])
+        print(self.augment.print())
 
     def __call__(self, img, boxes, labels):
         return self.augment(img, boxes, labels)
