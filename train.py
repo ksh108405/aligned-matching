@@ -58,6 +58,8 @@ parser.add_argument('--train_set', default='trainval',
                     help='used for divide train or test')
 parser.add_argument('--optimizer', default='SGD', choices=['SGD', 'Adam'],
                     help='Whether to use SGD or Adam optimizer.')
+parser.add_argument('--augmentation', default=True,
+                    help='Whether to take augmentation process.')
 args = parser.parse_args()
 
 
@@ -80,18 +82,18 @@ def train():
         cfg = voc
         image_sets = [('2007', args.train_set), ('2012', args.train_set)]
         dataset = VOCDetection(root=VOC_ROOT, image_sets=image_sets,
-                               transform=SSDAugmentation(cfg['min_dim'], MEANS))
+                               transform=SSDAugmentation(cfg['min_dim'], MEANS, args.augmentation))
     elif args.dataset == 'TT100K':
         cfg = tt100k
         image_sets = args.train_set
         if args.train_set == 'trainval':
             image_sets = 'train'
         dataset = TT100KDetection(root=TT100K_ROOT, image_sets=image_sets,
-                                  transform=SSDAugmentation(cfg['min_dim'], MEANS))
+                                  transform=SSDAugmentation(cfg['min_dim'], MEANS, args.augmentation))
     elif args.dataset == 'COCO':
         cfg = coco
         dataset = COCODetection(root=COCO_ROOT,
-                                transform=SSDAugmentation(cfg['min_dim'], MEANS))
+                                transform=SSDAugmentation(cfg['min_dim'], MEANS, args.augmentation))
     else:
         raise Exception('Select on VOC or TT100K or COCO.')
 
@@ -220,7 +222,7 @@ def train():
         conf_loss += loss_c.data
 
         if iteration % 1 == 0:
-            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data) + ' timer: %.4f sec.' % (t1 - t0))
+            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % loss.data + ' timer: %.4f sec.' % (t1 - t0))
 
         if args.visdom:
             update_vis_plot(iteration, loss_l.data, loss_c.data,
