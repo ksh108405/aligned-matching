@@ -401,7 +401,8 @@ class SSDAugmentation(object):
     def __init__(self, size=512, mean=(104, 117, 123), augment=True):
         self.mean = mean
         self.size = size
-        if augment:
+        if augment is True:
+            print('Augmentation turned on.')
             self.augment = Compose([
                 ConvertFromInts(),
                 ToAbsoluteCoords(),
@@ -414,6 +415,7 @@ class SSDAugmentation(object):
                 SubtractMeans(self.mean)
             ])
         else:
+            print('Augmentation turned off.')
             self.augment = Compose([
                 ConvertFromInts(),
                 Resize(self.size),

@@ -103,7 +103,7 @@ def train():
         viz = visdom.Visdom()
 
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'], args.dataset)
-    summary(ssd_net, input_size=(args.batch_size, 3, cfg['min_dim'], cfg['min_dim']), device='cuda')
+    # summary(ssd_net, input_size=(args.batch_size, 3, cfg['min_dim'], cfg['min_dim']), device='cuda')
     net = ssd_net
 
     if args.cuda:
