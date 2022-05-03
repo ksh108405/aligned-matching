@@ -53,7 +53,7 @@ parser.add_argument('--dataset', default=VOC_ROOT,
 parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
 parser.add_argument('--network_size', default=512, type=int,
-                    help='SSD network size (only 300 and 512 are supported)')
+                    help='SSD network size (only 300, 512 and 1024 are supported)')
 parser.add_argument('--test_set', default='test', type=str,
                     help='TT100K test set name')
 
