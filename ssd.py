@@ -154,58 +154,19 @@ def add_extras(cfg, i, batch_norm=False):
     in_channels = i
     flag = False
     for k, v in enumerate(cfg):
-        if in_channels != 'S':
+        if in_channels != 'S' and in_channels != 'F':
             if v == 'S':
                 layers += [nn.Conv2d(in_channels, cfg[k + 1],
                            kernel_size=(1, 3)[flag], stride=2, padding=1)]
+            elif v == 'F':
+                layers += [nn.Conv2d(in_channels, cfg[k + 1],
+                           kernel_size=4, stride=1, padding=1)]
             else:
                 layers += [nn.Conv2d(in_channels, v, kernel_size=(1, 3)[flag])]
             flag = not flag
         in_channels = v
     return layers
 
-def add_extras_512(in_channels):
-    # Extra layers added to VGG for feature scaling
-    layers = []
-
-    # add additional convolutional layers.
-
-    # conv6
-    # 16 x 16
-    layers += [nn.Conv2d(in_channels, out_channels=256, kernel_size=1, padding=0, stride=1)]
-    in_channels = 256
-    layers += [nn.Conv2d(in_channels, out_channels=512, kernel_size=3, padding=1, stride=2)]
-    in_channels = 512
-
-    # conv7
-    # 8 x 8
-    layers += [nn.Conv2d(in_channels, out_channels=128, kernel_size=1, padding=0, stride=1)]
-    in_channels = 128
-    layers += [nn.Conv2d(in_channels, out_channels=256, kernel_size=3, padding=1, stride=2)]
-    in_channels = 256
-
-    # conv8
-    # 4 x 4
-    layers += [nn.Conv2d(in_channels, out_channels=128, kernel_size=1, padding=0, stride=1)]
-    in_channels = 128
-    layers += [nn.Conv2d(in_channels, out_channels=256, kernel_size=3, padding=1, stride=2)]
-    in_channels = 256
-
-    # conv9
-    # 2 x 2
-    layers += [nn.Conv2d(in_channels, out_channels=128, kernel_size=1, padding=0, stride=1)]
-    in_channels = 128
-    layers += [nn.Conv2d(in_channels, out_channels=256, kernel_size=3, padding=1, stride=2)]
-    in_channels = 256
-
-    # conv10
-    # 1 x 1
-    layers += [nn.Conv2d(in_channels, out_channels=128, kernel_size=1, padding=0, stride=1)]
-    in_channels = 128
-    layers += [nn.Conv2d(in_channels, out_channels=256, kernel_size=4, padding=1, stride=1)]
-    in_channels = 256
-
-    return layers
 
 def multibox(vgg, extra_layers, cfg, num_classes):
     loc_layers = []
@@ -224,31 +185,26 @@ def multibox(vgg, extra_layers, cfg, num_classes):
     return vgg, extra_layers, (loc_layers, conf_layers)
 
 
-base = {
-    '300': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
-            512, 512, 512],
-    '512': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
-            512, 512, 512],
-}
+base = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M', 512, 512, 512]
 extras = {
     '300': [256, 'S', 512, 128, 'S', 256, 128, 256, 128, 256],
-    '512': [],
+    '512': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128, 'S', 256, 128, 'F', 256],
+    '1024': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128, 'S', 256, 128, 'S', 256, 128, 'F', 256]
 }
 mbox = {
     '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
-    '512': [4, 6, 6, 6, 6, 4, 4]
+    '512': [4, 6, 6, 6, 6, 4, 4],
     # '512': [5, 7, 7, 7, 7, 5, 5]  # If and only if 'half_sized' = True
+    '1024': [4, 6, 6, 6, 6, 6, 4, 4]
 }
 
 
 def build_ssd(phase, size=512, num_classes=21, cfg=None):
     if phase != "test" and phase != "train":
-        print("ERROR: Phase: " + phase + " not recognized")
-        return
-    if size != 300 and size != 512:
-        print("ERROR: You specified size " + repr(size) + ". However, " +
-              "currently only SSD300 (size=300) and SSD512 (size=512) are supported!")
-        return
+        raise Exception("ERROR: Phase: " + phase + " not recognized")
+    if size not in [300, 512, 1024]:
+        raise Exception("ERROR: You specified size " + repr(size) + ". However, " +
+                        "currently only SSD300, SSD512 and SSD1024 are supported!")
 
     if cfg == 'VOC':
         cfg = voc
@@ -257,21 +213,16 @@ def build_ssd(phase, size=512, num_classes=21, cfg=None):
     elif cfg == 'COCO':
         cfg = coco
     else:
-        print('Please specify correct config file!')
-        print('continuing with voc config...')
-        cfg = voc
+        raise Exception("ERROR: You specified config " + str(cfg) + ". However, " +
+                        "currently Pascal VOC, COCO and TT100K are supported!")
 
     if cfg['half_sized']:
         model_mbox = [i+1 for i in mbox[str(size)]]
     else:
         model_mbox = mbox[str(size)]
 
-    if size == 300:
-        base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
-                                         add_extras(extras[str(size)], 1024),
-                                         model_mbox, num_classes)
-    elif size == 512:
-        base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
-                                         add_extras_512(1024),
-                                         model_mbox, num_classes)
+    base_, extras_, head_ = multibox(vgg(base, 3),
+                                     add_extras(extras[str(size)], 1024),
+                                     model_mbox, num_classes)
+
     return SSD(phase, size, base_, extras_, head_, num_classes, cfg)
