@@ -5,6 +5,7 @@ from utils.get_detected_info import get_anchor_nums, get_anchor_box_size
 
 prior_info = 0
 
+
 def point_form(boxes):
     """ Convert prior_boxes to (xmin, ymin, xmax, ymax)
     representation for comparison to point form ground truth data.
@@ -13,8 +14,8 @@ def point_form(boxes):
     Return:
         boxes: (tensor) Converted xmin, ymin, xmax, ymax form of boxes.
     """
-    return torch.cat((boxes[:, :2] - boxes[:, 2:]/2,     # xmin, ymin
-                     boxes[:, :2] + boxes[:, 2:]/2), 1)  # xmax, ymax
+    return torch.cat((boxes[:, :2] - boxes[:, 2:] / 2,  # xmin, ymin
+                      boxes[:, :2] + boxes[:, 2:] / 2), 1)  # xmax, ymax
 
 
 def center_size(boxes):
@@ -63,14 +64,15 @@ def jaccard(box_a, box_b):
         jaccard overlap: (tensor) Shape: [box_a.size(0), box_b.size(0)]
     """
     inter = intersect(box_a, box_b)
-    area_a = ((box_a[:, 2]-box_a[:, 0]) *
-              (box_a[:, 3]-box_a[:, 1])).unsqueeze(1).expand_as(inter)  # [A,B]
-    area_b = ((box_b[:, 2]-box_b[:, 0]) *
-              (box_b[:, 3]-box_b[:, 1])).unsqueeze(0).expand_as(inter)  # [A,B]
+    area_a = ((box_a[:, 2] - box_a[:, 0]) *
+              (box_a[:, 3] - box_a[:, 1])).unsqueeze(1).expand_as(inter)  # [A,B]
+    area_b = ((box_b[:, 2] - box_b[:, 0]) *
+              (box_b[:, 3] - box_b[:, 1])).unsqueeze(0).expand_as(inter)  # [A,B]
     union = area_a + area_b - inter
     return inter / union  # [A,B]
 
-def aligned_matching(overlap, truths, threshold):
+
+def aligned_matching(overlap, truths, threshold, fix_ratio=False):
     prior_overlaps, prior_idx = overlap.sort(1, descending=True)
 
     best_prior_overlap = []
@@ -81,7 +83,7 @@ def aligned_matching(overlap, truths, threshold):
         prior_idx_cpu = prior_idx[i].cpu().numpy()
         truths_cpu = truths[i].cpu().numpy()
 
-        # 일정수준으로 IoU가 같은 default box만 남김
+        # select default box with maximum IoU.
         max_prior_overlap = prior_overlaps_cpu[0]
         for i, prior_overlap in enumerate(prior_overlaps_cpu):
             if max_prior_overlap > prior_overlap + threshold:
@@ -89,21 +91,44 @@ def aligned_matching(overlap, truths, threshold):
         prior_overlaps_cpu = prior_overlaps_cpu[0:i]
         prior_idx_cpu = prior_idx_cpu[0:i]
 
-        # gt와 가장 비슷한 ratio의 default box만 선택
+        # select default box with similar ratio with ground truth.
         allowed_priors = []
-        ratio_list = [1, -100, 2, 0.5, 3, 1/3]
-        truth_ratio = (truths_cpu[2] - truths_cpu[0]) / (truths_cpu[3] - truths_cpu[1])
-        gt_ratios = np.abs(np.array(ratio_list) - truth_ratio).argmin()
+        if fix_ratio:
+            ratio_seperator = [np.sqrt(2), 1/np.sqrt(2), np.sqrt(3)*np.sqrt(2), 1/np.sqrt(3)*np.sqrt(2)]
+            truth_ratio = (truths_cpu[2] - truths_cpu[0]) / (truths_cpu[3] - truths_cpu[1])
+            if truth_ratio > ratio_seperator[0]:
+                if truth_ratio > ratio_seperator[2]:
+                    gt_ratios = 4
+                else:
+                    gt_ratios = 2
+            elif truth_ratio < ratio_seperator[1]:
+                if truth_ratio < ratio_seperator[3]:
+                    gt_ratios = 5
+                else:
+                    gt_ratios = 3
+            else:
+                gt_ratios = 0
+        else:
+            allowed_priors = []
+            ratio_list = [1, -100, 2, 0.5, 3, 1 / 3]
+            truth_ratio = (truths_cpu[2] - truths_cpu[0]) / (truths_cpu[3] - truths_cpu[1])
+            gt_ratios = np.abs(np.array(ratio_list) - truth_ratio).argmin()
         for i, prior_id in enumerate(prior_idx_cpu):
-            if get_anchor_box_size(prior_id) == gt_ratios:
+            prior_ratio = get_anchor_box_size(prior_id)
+            if fix_ratio is True and prior_ratio == 1:  # append big 1:1 default box.
+                prior_ratio = 0
+            if prior_ratio == gt_ratios:
                 allowed_priors.append(i)
             else:
-                anchor_size_list, accumulated_slice_list = get_anchor_nums()  # 해당 디폴트 박스에 속한 레이어가 가진 디폴트박스의 종류 계산
+                # get types of default box ratio of each feature map.
+                anchor_size_list, accumulated_slice_list = get_anchor_nums()
                 for j, accumulated_slice in enumerate(accumulated_slice_list):
                     if prior_id < accumulated_slice:
                         break
-                if (anchor_size_list[j] - 1) < gt_ratios:  # ratio가 범위를 벗어났을 경우 (예: 1:3, 3:1 디폴트박스가 없는 레이어인 경우)
-                    if get_anchor_box_size(prior_id) % 2 == gt_ratios % 2:  # 3:1 gt에 2:1 디폴트박스 매칭, 1:3 gt에 1:2 디폴트박스 매칭
+                # if ratio is out of range (ex. feature map with no 1:3, 3:1 default box)
+                if (anchor_size_list[j] - 1) < gt_ratios:
+                    # match 2:1 default box with 3:1 ground truth, and on...
+                    if get_anchor_box_size(prior_id) % 2 == gt_ratios % 2:
                         allowed_priors.append(i)
 
         if allowed_priors:
@@ -115,7 +140,7 @@ def aligned_matching(overlap, truths, threshold):
             prior_overlaps_cpu = prior_overlaps_cpu_temp
             prior_idx_cpu = prior_idx_cpu_temp
 
-        # 남은 default box 중 gt와 가장 center가 비슷한 것 선택
+        # select default box which nearest with ground truth.
         center_sizes = prior_sizes[prior_idx_cpu]
         truth_cx = (truths_cpu[2] + truths_cpu[0]) / 2
         truth_cy = (truths_cpu[3] + truths_cpu[1]) / 2
@@ -126,6 +151,7 @@ def aligned_matching(overlap, truths, threshold):
     best_prior_overlap = torch.tensor(best_prior_overlap)
     best_prior_idx = torch.tensor(best_prior_idx)
     return best_prior_overlap, best_prior_idx
+
 
 def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matching):
     """Match each prior box with the ground truth box of the highest jaccard
@@ -165,7 +191,11 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     if matching == 'legacy':
         best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
     elif matching == 'aligned':
-        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6)  # use new matching strategy
+        # use aligned matching
+        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6)
+    elif matching == 'aligned_2':
+        # use fixed aligned matching
+        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, True)
     # [1,num_priors] best ground truth for each prior
     best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
     best_truth_idx.squeeze_(0)
@@ -177,11 +207,11 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     # ensure every gt matches with its prior of max overlap
     for j in range(best_prior_idx.size(0)):
         best_truth_idx[best_prior_idx[j]] = j
-    matches = truths[best_truth_idx]          # Shape: [num_priors,4]
-    conf = labels[best_truth_idx] + 1         # Shape: [num_priors]
+    matches = truths[best_truth_idx]  # Shape: [num_priors,4]
+    conf = labels[best_truth_idx] + 1  # Shape: [num_priors]
     conf[best_truth_overlap < threshold] = 0  # label as background
     loc = encode(matches, priors, variances)
-    loc_t[idx] = loc    # [num_priors,4] encoded offsets to learn
+    loc_t[idx] = loc  # [num_priors,4] encoded offsets to learn
     conf_t[idx] = conf  # [num_priors] top class label for each prior
 
 
@@ -199,7 +229,7 @@ def encode(matched, priors, variances):
     """
 
     # dist b/t match center and prior's center
-    g_cxcy = (matched[:, :2] + matched[:, 2:])/2 - priors[:, :2]
+    g_cxcy = (matched[:, :2] + matched[:, 2:]) / 2 - priors[:, :2]
     # encode variance
     g_cxcy /= (variances[0] * priors[:, 2:])
     # match wh / prior wh
@@ -239,7 +269,7 @@ def log_sum_exp(x):
         x (Variable(tensor)): conf_preds from conf layers
     """
     x_max = x.data.max()
-    return torch.log(torch.sum(torch.exp(x-x_max), 1, keepdim=True)) + x_max
+    return torch.log(torch.sum(torch.exp(x - x_max), 1, keepdim=True)) + x_max
 
 
 # Original author: Francisco Massa:
@@ -302,11 +332,11 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
         # check sizes of xx1 and xx2.. after each iteration
         w = torch.clamp(w, min=0.0)
         h = torch.clamp(h, min=0.0)
-        inter = w*h
+        inter = w * h
         # IoU = i / (area(a) + area(b) - i)
         rem_areas = torch.index_select(area, 0, idx)  # load remaining areas)
         union = (rem_areas - inter) + area[i]
-        IoU = inter/union  # store result in iou
+        IoU = inter / union  # store result in iou
         # keep only elements with an IoU <= overlap
         idx = idx[IoU.le(overlap)]
     return keep, count

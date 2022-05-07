@@ -52,14 +52,18 @@ parser.add_argument('--save_folder', default='weights/',
                     help='Directory for saving checkpoint models')
 parser.add_argument('--weight_name', default='None_',
                     help='Saved weight name')
-parser.add_argument('--matching_strategy', default='legacy', choices=['legacy', 'aligned'],
-                    help='Select matching strategy (legacy or aligned)')
+parser.add_argument('--matching_strategy', default='legacy', choices=['legacy', 'aligned', 'aligned_2'],
+                    help='Select matching strategy (legacy or aligned or aligned_2)')
 parser.add_argument('--train_set', default='trainval',
                     help='used for divide train or test')
 parser.add_argument('--optimizer', default='SGD', choices=['SGD', 'Adam'],
                     help='Whether to use SGD or Adam optimizer.')
 parser.add_argument('--augmentation', default=True,
                     help='Whether to take augmentation process.')
+parser.add_argument('--shuffle', default=True,
+                    help='set to True to have the data reshuffled at every epoch.')
+parser.add_argument('--one_epoch', default=False,
+                    help='Only iterate for one epoch.')
 args = parser.parse_args()
 
 
@@ -167,7 +171,7 @@ def train():
 
     data_loader = data.DataLoader(dataset, args.batch_size,
                                   num_workers=args.num_workers,
-                                  shuffle=True, collate_fn=detection_collate,
+                                  shuffle=args.shuffle, collate_fn=detection_collate,
                                   pin_memory=True)
     # create batch iterator
     batch_iterator = iter(data_loader)
@@ -234,6 +238,10 @@ def train():
             while os.path.isfile(weight_path + '.pth'):
                 weight_path += '_add'
             torch.save(ssd_net.state_dict(), weight_path + '.pth')
+
+        if args.one_epoch is True and iteration > epoch_size:
+            print('One epoch reached : exiting training...')
+            exit(0)
     torch.save(ssd_net.state_dict(),
                args.save_folder + args.weight_name + '_full.pth')
 

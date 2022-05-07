@@ -2,7 +2,7 @@ from data.config import voc, tt100k, coco
 anchor_result = [0, 0, 0, 0, 0, 0]
 feature_result = [0, 0, 0, 0, 0, 0, 0]
 
-cfg = voc
+cfg = tt100k
 
 def get_anchor_nums(feature_map=cfg['feature_maps'], anchor_box=cfg['aspect_ratios'], square_anchor_num=2):
     accumulated_slice_list = []
