@@ -115,8 +115,9 @@ def aligned_matching(overlap, truths, threshold, fix_ratio=False):
             gt_ratios = np.abs(np.array(ratio_list) - truth_ratio).argmin()
         for i, prior_id in enumerate(prior_idx_cpu):
             prior_ratio = get_anchor_box_size(prior_id)
-            if fix_ratio is True and prior_ratio == 1:  # append big 1:1 default box.
-                prior_ratio = 0
+            if fix_ratio:
+                if prior_ratio == 1:  # append big 1:1 default box.
+                    prior_ratio = 0
             if prior_ratio == gt_ratios:
                 allowed_priors.append(i)
             else:
