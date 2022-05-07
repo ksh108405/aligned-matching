@@ -239,9 +239,9 @@ def train():
                 weight_path += '_add'
             torch.save(ssd_net.state_dict(), weight_path + '.pth')
 
-        if args.one_epoch is True and iteration > epoch_size:
-            print('One epoch reached : exiting training...')
-            exit(0)
+        if args.one_epoch and iteration > epoch_size:
+            print('One epoch reached: exiting training...')
+            return 0
     torch.save(ssd_net.state_dict(),
                args.save_folder + args.weight_name + '_full.pth')
 
