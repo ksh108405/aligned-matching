@@ -2,9 +2,8 @@ from data.config import voc, tt100k, coco
 anchor_result = [0, 0, 0, 0, 0, 0]
 feature_result = [0, 0, 0, 0, 0, 0, 0]
 
-cfg = tt100k
 
-def get_anchor_nums(feature_map=cfg['feature_maps'], anchor_box=cfg['aspect_ratios'], square_anchor_num=2):
+def get_anchor_nums(feature_map, anchor_box, square_anchor_num=2):
     accumulated_slice_list = []
     slice_list = []
     anchor_size_list = []
@@ -22,7 +21,7 @@ def get_anchor_nums(feature_map=cfg['feature_maps'], anchor_box=cfg['aspect_rati
     return anchor_size_list, accumulated_slice_list
 
 
-def get_anchor_box_size(idx, feature_map=cfg['feature_maps'], anchor_box=cfg['aspect_ratios'], square_anchor_num=2):
+def get_anchor_box_size(idx, feature_map, anchor_box, square_anchor_num=2):
     anchor_size_list, accumulated_slice_list = get_anchor_nums(feature_map, anchor_box, square_anchor_num)
     # print(anchor_size_list, accumulated_slice_list)
     for i, elem in enumerate(accumulated_slice_list):

@@ -52,7 +52,7 @@ parser.add_argument('--save_folder', default='weights/',
                     help='Directory for saving checkpoint models')
 parser.add_argument('--weight_name', default='None_',
                     help='Saved weight name')
-parser.add_argument('--matching_strategy', default='legacy', choices=['legacy', 'aligned', 'aligned_2'],
+parser.add_argument('--matching_strategy', default='legacy', choices=['legacy', 'aligned', 'aligned_2', 'aligned_1a'],
                     help='Select matching strategy (legacy or aligned or aligned_2)')
 parser.add_argument('--train_set', default='trainval',
                     help='used for divide train or test')
@@ -140,7 +140,7 @@ def train():
                                weight_decay=args.weight_decay,
                                amsgrad=True)  # use adam for tt100k training
     criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
-                             False, args.cuda, matching=args.matching_strategy)
+                             False, cfg, args.cuda, matching=args.matching_strategy)
 
     net.train()
 

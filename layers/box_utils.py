@@ -72,7 +72,7 @@ def jaccard(box_a, box_b):
     return inter / union  # [A,B]
 
 
-def aligned_matching(overlap, truths, threshold, fix_ratio=False):
+def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, only_1a=False):
     prior_overlaps, prior_idx = overlap.sort(1, descending=True)
 
     best_prior_overlap = []
@@ -93,9 +93,9 @@ def aligned_matching(overlap, truths, threshold, fix_ratio=False):
 
         # select default box with similar ratio with ground truth.
         allowed_priors = []
+        truth_ratio = (truths_cpu[2] - truths_cpu[0]) / (truths_cpu[3] - truths_cpu[1])
         if fix_ratio:
             ratio_seperator = [np.sqrt(2), 1/np.sqrt(2), np.sqrt(3)*np.sqrt(2), 1/np.sqrt(3)*np.sqrt(2)]
-            truth_ratio = (truths_cpu[2] - truths_cpu[0]) / (truths_cpu[3] - truths_cpu[1])
             if truth_ratio > ratio_seperator[0]:
                 if truth_ratio > ratio_seperator[2]:
                     gt_ratios = 4
@@ -108,13 +108,13 @@ def aligned_matching(overlap, truths, threshold, fix_ratio=False):
                     gt_ratios = 3
             else:
                 gt_ratios = 0
+        elif only_1a:
+            gt_ratios = 0
         else:
-            allowed_priors = []
             ratio_list = [1, -100, 2, 0.5, 3, 1 / 3]
-            truth_ratio = (truths_cpu[2] - truths_cpu[0]) / (truths_cpu[3] - truths_cpu[1])
             gt_ratios = np.abs(np.array(ratio_list) - truth_ratio).argmin()
         for i, prior_id in enumerate(prior_idx_cpu):
-            prior_ratio = get_anchor_box_size(prior_id)
+            prior_ratio = get_anchor_box_size(prior_id, cfg['feature_maps'], cfg['aspect_ratios'])
             if fix_ratio:
                 if prior_ratio == 1:  # append big 1:1 default box.
                     prior_ratio = 0
@@ -122,14 +122,14 @@ def aligned_matching(overlap, truths, threshold, fix_ratio=False):
                 allowed_priors.append(i)
             else:
                 # get types of default box ratio of each feature map.
-                anchor_size_list, accumulated_slice_list = get_anchor_nums()
+                anchor_size_list, accumulated_slice_list = get_anchor_nums(cfg['feature_maps'], cfg['aspect_ratios'])
                 for j, accumulated_slice in enumerate(accumulated_slice_list):
                     if prior_id < accumulated_slice:
                         break
                 # if ratio is out of range (ex. feature map with no 1:3, 3:1 default box)
                 if (anchor_size_list[j] - 1) < gt_ratios:
-                    # match 2:1 default box with 3:1 ground truth, and on...
-                    if get_anchor_box_size(prior_id) % 2 == gt_ratios % 2:
+                    # match 2:1 default box with 3:1 ground truth and so on...
+                    if get_anchor_box_size(prior_id, cfg['feature_maps'], cfg['aspect_ratios']) % 2 == gt_ratios % 2:
                         allowed_priors.append(i)
 
         if allowed_priors:
@@ -154,7 +154,7 @@ def aligned_matching(overlap, truths, threshold, fix_ratio=False):
     return best_prior_overlap, best_prior_idx
 
 
-def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matching):
+def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matching, cfg):
     """Match each prior box with the ground truth box of the highest jaccard
     overlap, encode the bounding boxes, then return the matched indices
     corresponding to both confidence and location preds.
@@ -185,7 +185,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
         prior_sizes = center_size(priors).cpu().numpy()
         prior_info = []
         for i in range(len(priors)):
-            prior_info.append(get_anchor_box_size(i))
+            prior_info.append(get_anchor_box_size(i, cfg['feature_maps'], cfg['aspect_ratios']))
 
     # (Bipartite Matching)
     # [1,num_objects] best prior for each ground truth
@@ -193,10 +193,13 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
         best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
     elif matching == 'aligned':
         # use aligned matching
-        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6)
+        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, cfg)
     elif matching == 'aligned_2':
         # use fixed aligned matching
-        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, True)
+        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, cfg, True)
+    elif matching == 'aligned_1a':
+        # use fixed aligned matching
+        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, cfg, False, True)
     # [1,num_priors] best ground truth for each prior
     best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
     best_truth_idx.squeeze_(0)
