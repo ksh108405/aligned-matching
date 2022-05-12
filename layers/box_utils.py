@@ -72,16 +72,24 @@ def jaccard(box_a, box_b):
     return inter / union  # [A,B]
 
 
-def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, only_1a=False):
+def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignored=False, only_1a=False):
     prior_overlaps, prior_idx = overlap.sort(1, descending=True)
 
     best_prior_overlap = []
     best_prior_idx = []
 
+    ignored_prior_idx = []
+
     for i in range(prior_overlaps.shape[0]):
         prior_overlaps_cpu = prior_overlaps[i].cpu().numpy()
         prior_idx_cpu = prior_idx[i].cpu().numpy()
         truths_cpu = truths[i].cpu().numpy()
+        if fix_ignored:
+            ignored_idx = []
+            for j in ignored_prior_idx:
+                ignored_idx += [np.where(prior_idx_cpu == ignored_prior_idx)]
+            np.delete(prior_overlaps_cpu, ignored_idx)
+            np.delete(prior_idx_cpu, ignored_idx)
 
         # select default box with maximum IoU.
         max_prior_overlap = prior_overlaps_cpu[0]
@@ -149,6 +157,9 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, only_1a=F
         idx = np.argmin(center_dist)
         best_prior_overlap.append([prior_overlaps_cpu[idx]])
         best_prior_idx.append([prior_idx_cpu[idx]])
+        if fix_ignored:
+            ignored_prior_idx.append(prior_idx_cpu[idx])
+    print(ignored_prior_idx)
     best_prior_overlap = torch.tensor(best_prior_overlap)
     best_prior_idx = torch.tensor(best_prior_idx)
     return best_prior_overlap, best_prior_idx
@@ -199,9 +210,48 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
         best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, cfg, True)
     elif matching == 'aligned_1a':
         # use fixed aligned matching
-        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, cfg, False, True)
+        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, cfg, False, False, True)
+    elif matching == 'aligned_3':
+        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, cfg, True, True)
     # [1,num_priors] best ground truth for each prior
     best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
+
+    # Start visualization code
+    """
+    import cv2
+    import math
+    from data.config import tt100k
+
+    img = np.zeros((1000, 1000, 3), np.uint8)
+    obj_idx = 0
+    for prior_idx in point_form(priors)[best_prior_idx]:
+        prior_idx = prior_idx[0].cpu().numpy()
+        print(
+            f'matched ratio : {np.around(((prior_idx[2] - prior_idx[0]) / (prior_idx[3] - prior_idx[1])), decimals=2)}')
+        print(int(best_prior_idx[obj_idx]))
+        print(int(obj_idx))
+        print(f"algorithm result : {get_anchor_box_size(int(best_prior_idx[obj_idx]), cfg['feature_maps'], cfg['aspect_ratios'])}")
+        obj_idx += 1
+        print((prior_idx[0] * 1000, prior_idx[1] * 1000))
+        print((prior_idx[2] * 1000, prior_idx[3] * 1000))
+        img = cv2.rectangle(img, (int(prior_idx[0] * 1000), int(prior_idx[1] * 1000)),
+                            (int(prior_idx[2] * 1000), int(prior_idx[3] * 1000)), (0, 0, 255), 3)
+    print('truth =')
+    for truth in truths:
+        print((truth[0] * 1000, truth[1] * 1000))
+        print((truth[2] * 1000, truth[3] * 1000))
+        print(f'width = {truth[2] * 1000 - truth[0] * 1000}')
+        print(f'height = {truth[3] * 1000 - truth[1] * 1000}')
+        img = cv2.rectangle(img, (int(truth[0] * 1000), int(truth[1] * 1000)),
+                            (int(truth[2] * 1000), int(truth[3] * 1000)), (0, 255, 0), 3)
+
+    cv2.imwrite(
+        f'./matching_output/aligned2_0.10/{int(truth[0] * 1000)},{int(truth[1] * 1000)},'
+        f'{int(truth[2] * 1000)},{int(truth[3] * 1000)}.png', img)  # 이미지 저장
+    # cv2.imshow('bbox', img)
+    # cv2.waitKey(0)
+    """
+    # End visualization code
     best_truth_idx.squeeze_(0)
     best_truth_overlap.squeeze_(0)
     best_prior_idx.squeeze_(1)

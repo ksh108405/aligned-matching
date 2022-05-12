@@ -52,7 +52,8 @@ parser.add_argument('--save_folder', default='weights/',
                     help='Directory for saving checkpoint models')
 parser.add_argument('--weight_name', default='None_',
                     help='Saved weight name')
-parser.add_argument('--matching_strategy', default='legacy', choices=['legacy', 'aligned', 'aligned_2', 'aligned_1a'],
+parser.add_argument('--matching_strategy', default='legacy',
+                    choices=['legacy', 'aligned', 'aligned_2', 'aligned_1a', 'aligned_3'],
                     help='Select matching strategy (legacy or aligned or aligned_2)')
 parser.add_argument('--train_set', default='trainval',
                     help='used for divide train or test')
