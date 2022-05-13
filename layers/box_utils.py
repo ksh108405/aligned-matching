@@ -84,12 +84,6 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
         prior_overlaps_cpu = prior_overlaps[i].cpu().numpy()
         prior_idx_cpu = prior_idx[i].cpu().numpy()
         truths_cpu = truths[i].cpu().numpy()
-        if fix_ignored:
-            ignored_idx = []
-            for j in ignored_prior_idx:
-                ignored_idx += [np.where(prior_idx_cpu == ignored_prior_idx)]
-            np.delete(prior_overlaps_cpu, ignored_idx)
-            np.delete(prior_idx_cpu, ignored_idx)
 
         # select default box with maximum IoU.
         max_prior_overlap = prior_overlaps_cpu[0]
@@ -98,6 +92,15 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
                 break
         prior_overlaps_cpu = prior_overlaps_cpu[0:i]
         prior_idx_cpu = prior_idx_cpu[0:i]
+
+        # select default box which nearest with ground truth.
+        center_sizes = prior_sizes[prior_idx_cpu]
+        truth_cx = (truths_cpu[2] + truths_cpu[0]) / 2
+        truth_cy = (truths_cpu[3] + truths_cpu[1]) / 2
+        center_dist = np.sqrt(np.power(center_sizes[:, 0] - truth_cx, 2) + np.power(center_sizes[:, 1] - truth_cy, 2))
+        idx = np.where(center_dist == center_dist.min())
+        prior_overlaps_cpu = prior_overlaps_cpu[idx]
+        prior_idx_cpu = prior_idx_cpu[idx]
 
         # select default box with similar ratio with ground truth.
         allowed_priors = []
@@ -139,27 +142,28 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
                     # match 2:1 default box with 3:1 ground truth and so on...
                     if get_anchor_box_size(prior_id, cfg['feature_maps'], cfg['aspect_ratios']) % 2 == gt_ratios % 2:
                         allowed_priors.append(i)
+        if fix_ignored:
+            ignored_idx = []
+            for j in ignored_prior_idx:
+                for k, prior_idx_ in enumerate(prior_idx_cpu):
+                    if prior_idx_ == j:
+                        ignored_idx.append(k)
+                        break
+            for allowed_idx in allowed_priors[:]:
+                if allowed_idx in ignored_idx:
+                    allowed_priors.remove(allowed_idx)
 
         if allowed_priors:
-            prior_overlaps_cpu_temp = []
-            prior_idx_cpu_temp = []
-            for allowed_prior in allowed_priors:
-                prior_overlaps_cpu_temp.append(prior_overlaps_cpu[allowed_prior])
-                prior_idx_cpu_temp.append(prior_idx_cpu[allowed_prior])
-            prior_overlaps_cpu = prior_overlaps_cpu_temp
-            prior_idx_cpu = prior_idx_cpu_temp
+            prior_overlaps_cpu = prior_overlaps_cpu[allowed_priors[0]]
+            prior_idx_cpu = prior_idx_cpu[allowed_priors[0]]
+        else:
+            prior_overlaps_cpu = prior_overlaps_cpu[0]
+            prior_idx_cpu = prior_idx_cpu[0]
 
-        # select default box which nearest with ground truth.
-        center_sizes = prior_sizes[prior_idx_cpu]
-        truth_cx = (truths_cpu[2] + truths_cpu[0]) / 2
-        truth_cy = (truths_cpu[3] + truths_cpu[1]) / 2
-        center_dist = np.sqrt(np.power(center_sizes[:, 0] - truth_cx, 2) + np.power(center_sizes[:, 1] - truth_cy, 2))
-        idx = np.argmin(center_dist)
-        best_prior_overlap.append([prior_overlaps_cpu[idx]])
-        best_prior_idx.append([prior_idx_cpu[idx]])
+        best_prior_overlap.append([prior_overlaps_cpu])
+        best_prior_idx.append([prior_idx_cpu])
         if fix_ignored:
-            ignored_prior_idx.append(prior_idx_cpu[idx])
-    print(ignored_prior_idx)
+            ignored_prior_idx.append(prior_idx_cpu)
     best_prior_overlap = torch.tensor(best_prior_overlap)
     best_prior_idx = torch.tensor(best_prior_idx)
     return best_prior_overlap, best_prior_idx
@@ -170,8 +174,8 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     overlap, encode the bounding boxes, then return the matched indices
     corresponding to both confidence and location preds.
     Args:
-        threshold: (float) The overlap threshold used when mathing boxes.
-        truths: (tensor) Ground truth boxes, Shape: [num_obj, num_priors].
+        threshold: (float) The overlap threshold used when matching boxes.
+        truths: (tensor) Ground truth boxes, Shape: [num_obj, 4].
         priors: (tensor) Prior boxes from priorbox layers, Shape: [n_priors,4].
         variances: (tensor) Variances corresponding to each prior coord,
             Shape: [num_priors, 4].
@@ -207,17 +211,17 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
         best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, cfg)
     elif matching == 'aligned_2':
         # use fixed aligned matching
-        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, cfg, True)
+        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, cfg, fix_ratio=True)
     elif matching == 'aligned_1a':
         # use fixed aligned matching
-        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, cfg, False, False, True)
+        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, cfg, fix_ratio=False, fix_ignored=False, only_1a=True)
     elif matching == 'aligned_3':
-        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, cfg, True, True)
+        best_prior_overlap, best_prior_idx = aligned_matching(overlaps, truths, 1e-6, cfg, fix_ratio=True, fix_ignored=True)
     # [1,num_priors] best ground truth for each prior
     best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
 
     # Start visualization code
-    """
+
     import cv2
     import math
     from data.config import tt100k
@@ -226,42 +230,54 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     obj_idx = 0
     for prior_idx in point_form(priors)[best_prior_idx]:
         prior_idx = prior_idx[0].cpu().numpy()
-        print(
-            f'matched ratio : {np.around(((prior_idx[2] - prior_idx[0]) / (prior_idx[3] - prior_idx[1])), decimals=2)}')
-        print(int(best_prior_idx[obj_idx]))
-        print(int(obj_idx))
-        print(f"algorithm result : {get_anchor_box_size(int(best_prior_idx[obj_idx]), cfg['feature_maps'], cfg['aspect_ratios'])}")
+        # print(
+        #     f'matched ratio : {np.around(((prior_idx[2] - prior_idx[0]) / (prior_idx[3] - prior_idx[1])), decimals=2)}')
+        # print(int(best_prior_idx[obj_idx]))
+        # print(int(obj_idx))
+        # print(f"algorithm result : {get_anchor_box_size(int(best_prior_idx[obj_idx]), cfg['feature_maps'], cfg['aspect_ratios'])}")
         obj_idx += 1
-        print((prior_idx[0] * 1000, prior_idx[1] * 1000))
-        print((prior_idx[2] * 1000, prior_idx[3] * 1000))
+        # print((prior_idx[0] * 1000, prior_idx[1] * 1000))
+        # print((prior_idx[2] * 1000, prior_idx[3] * 1000))
         img = cv2.rectangle(img, (int(prior_idx[0] * 1000), int(prior_idx[1] * 1000)),
                             (int(prior_idx[2] * 1000), int(prior_idx[3] * 1000)), (0, 0, 255), 3)
-    print('truth =')
+    # print('truth =')
     for truth in truths:
-        print((truth[0] * 1000, truth[1] * 1000))
-        print((truth[2] * 1000, truth[3] * 1000))
-        print(f'width = {truth[2] * 1000 - truth[0] * 1000}')
-        print(f'height = {truth[3] * 1000 - truth[1] * 1000}')
+        # print((truth[0] * 1000, truth[1] * 1000))
+        # print((truth[2] * 1000, truth[3] * 1000))
+        # print(f'width = {truth[2] * 1000 - truth[0] * 1000}')
+        # print(f'height = {truth[3] * 1000 - truth[1] * 1000}')
         img = cv2.rectangle(img, (int(truth[0] * 1000), int(truth[1] * 1000)),
                             (int(truth[2] * 1000), int(truth[3] * 1000)), (0, 255, 0), 3)
 
-    cv2.imwrite(
-        f'./matching_output/aligned2_0.10/{int(truth[0] * 1000)},{int(truth[1] * 1000)},'
-        f'{int(truth[2] * 1000)},{int(truth[3] * 1000)}.png', img)  # 이미지 저장
-    # cv2.imshow('bbox', img)
-    # cv2.waitKey(0)
-    """
+    # cv2.imwrite(
+    #     f'./matching_output/aligned2_0.10/{int(truth[0] * 1000)},{int(truth[1] * 1000)},'
+    #     f'{int(truth[2] * 1000)},{int(truth[3] * 1000)}.png', img)  # 이미지 저장
+    cv2.imshow('bbox', img)
+    cv2.waitKey(2000)
+
     # End visualization code
     best_truth_idx.squeeze_(0)
     best_truth_overlap.squeeze_(0)
     best_prior_idx.squeeze_(1)
     best_prior_overlap.squeeze_(1)
     best_truth_overlap.index_fill_(0, best_prior_idx, 2)  # ensure best prior
-    # TODO refactor: index  best_prior_idx with long tensor
-    # ensure every gt matches with its prior of max overlap
+
+    # set matched box coordinate to prior box data.
+    matches = priors
+    # for each ground truth,
     for j in range(best_prior_idx.size(0)):
+        # ensure every gt matches with its prior of max overlap
         best_truth_idx[best_prior_idx[j]] = j
-    matches = truths[best_truth_idx]  # Shape: [num_priors,4]
+        # write ground truth data on matched default box.
+        matches[best_prior_idx[j]] = truths[j]
+        # write ground truth data on default box which has iou over threshold.
+        multi_matching_idx = torch.where(best_truth_overlap >= threshold)
+        for k in multi_matching_idx[0]:
+            matches[k] = truths[best_truth_idx[k]]
+
+    # matches = truths[best_truth_idx]  # Shape: [num_priors,4]
+
+
     conf = labels[best_truth_idx] + 1  # Shape: [num_priors]
     conf[best_truth_overlap < threshold] = 0  # label as background
     loc = encode(matches, priors, variances)
