@@ -84,6 +84,14 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
         prior_overlaps_cpu = prior_overlaps[i].cpu().numpy()
         prior_idx_cpu = prior_idx[i].cpu().numpy()
         truths_cpu = truths[i].cpu().numpy()
+        if fix_ignored:
+            ignored_idx = []
+            for j in ignored_prior_idx:
+                ignored_idx += [np.where(prior_idx_cpu == ignored_prior_idx)]
+            print(f'before = {prior_idx_cpu.shape}')
+            np.delete(prior_overlaps_cpu, ignored_idx)
+            np.delete(prior_idx_cpu, ignored_idx)
+            print(f'after = {prior_idx_cpu.shape}')
 
         # select default box with maximum IoU.
         max_prior_overlap = prior_overlaps_cpu[0]
@@ -92,15 +100,6 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
                 break
         prior_overlaps_cpu = prior_overlaps_cpu[0:i]
         prior_idx_cpu = prior_idx_cpu[0:i]
-
-        # select default box which nearest with ground truth.
-        center_sizes = prior_sizes[prior_idx_cpu]
-        truth_cx = (truths_cpu[2] + truths_cpu[0]) / 2
-        truth_cy = (truths_cpu[3] + truths_cpu[1]) / 2
-        center_dist = np.sqrt(np.power(center_sizes[:, 0] - truth_cx, 2) + np.power(center_sizes[:, 1] - truth_cy, 2))
-        idx = np.where(center_dist == center_dist.min())
-        prior_overlaps_cpu = prior_overlaps_cpu[idx]
-        prior_idx_cpu = prior_idx_cpu[idx]
 
         # select default box with similar ratio with ground truth.
         allowed_priors = []
@@ -142,28 +141,26 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
                     # match 2:1 default box with 3:1 ground truth and so on...
                     if get_anchor_box_size(prior_id, cfg['feature_maps'], cfg['aspect_ratios']) % 2 == gt_ratios % 2:
                         allowed_priors.append(i)
-        if fix_ignored:
-            ignored_idx = []
-            for j in ignored_prior_idx:
-                for k, prior_idx_ in enumerate(prior_idx_cpu):
-                    if prior_idx_ == j:
-                        ignored_idx.append(k)
-                        break
-            for allowed_idx in allowed_priors[:]:
-                if allowed_idx in ignored_idx:
-                    allowed_priors.remove(allowed_idx)
 
         if allowed_priors:
-            prior_overlaps_cpu = prior_overlaps_cpu[allowed_priors[0]]
-            prior_idx_cpu = prior_idx_cpu[allowed_priors[0]]
-        else:
-            prior_overlaps_cpu = prior_overlaps_cpu[0]
-            prior_idx_cpu = prior_idx_cpu[0]
+            prior_overlaps_cpu_temp = []
+            prior_idx_cpu_temp = []
+            for allowed_prior in allowed_priors:
+                prior_overlaps_cpu_temp.append(prior_overlaps_cpu[allowed_prior])
+                prior_idx_cpu_temp.append(prior_idx_cpu[allowed_prior])
+            prior_overlaps_cpu = prior_overlaps_cpu_temp
+            prior_idx_cpu = prior_idx_cpu_temp
 
-        best_prior_overlap.append([prior_overlaps_cpu])
-        best_prior_idx.append([prior_idx_cpu])
+        # select default box which nearest with ground truth.
+        center_sizes = prior_sizes[prior_idx_cpu]
+        truth_cx = (truths_cpu[2] + truths_cpu[0]) / 2
+        truth_cy = (truths_cpu[3] + truths_cpu[1]) / 2
+        center_dist = np.sqrt(np.power(center_sizes[:, 0] - truth_cx, 2) + np.power(center_sizes[:, 1] - truth_cy, 2))
+        idx = np.argmin(center_dist)
+        best_prior_overlap.append([prior_overlaps_cpu[idx]])
+        best_prior_idx.append([prior_idx_cpu[idx]])
         if fix_ignored:
-            ignored_prior_idx.append(prior_idx_cpu)
+            ignored_prior_idx.append(prior_idx_cpu[idx])
     best_prior_overlap = torch.tensor(best_prior_overlap)
     best_prior_idx = torch.tensor(best_prior_idx)
     return best_prior_overlap, best_prior_idx
@@ -221,7 +218,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
 
     # Start visualization code
-
+    """
     import cv2
     import math
     from data.config import tt100k
@@ -254,7 +251,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     #     f'{int(truth[2] * 1000)},{int(truth[3] * 1000)}.png', img)  # 이미지 저장
     cv2.imshow('bbox', img)
     cv2.waitKey(2000)
-
+    """
     # End visualization code
     best_truth_idx.squeeze_(0)
     best_truth_overlap.squeeze_(0)
