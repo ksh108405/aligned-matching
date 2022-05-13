@@ -82,17 +82,21 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
     best_prior_idx = []
 
     for i in range(prior_overlaps_cpu_list.shape[0]):
-        prior_overlaps_cpu = prior_overlaps_cpu_list[i]
-        prior_idx_cpu = prior_idx_cpu_list[i]
+        prior_overlaps_cpu = prior_overlaps_cpu_list[i].copy()
+        prior_idx_cpu = prior_idx_cpu_list[i].copy()
         truths_cpu = truths_cpu_list[i]
 
         # select default box with maximum IoU.
         max_prior_overlap = prior_overlaps_cpu[0]
+        allowed_priors = []
         for i, prior_overlap in enumerate(prior_overlaps_cpu):
             if max_prior_overlap > prior_overlap + threshold:
-                break
-        prior_overlaps_cpu = prior_overlaps_cpu[0:i]
-        prior_idx_cpu = prior_idx_cpu[0:i]
+                if not prior_overlap == -1:
+                    break
+            else:
+                allowed_priors.append(i)
+        prior_overlaps_cpu = prior_overlaps_cpu[allowed_priors]
+        prior_idx_cpu = prior_idx_cpu[allowed_priors]
 
         # select default box with similar ratio with ground truth.
         allowed_priors = []
@@ -154,10 +158,11 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
         best_prior_idx.append([prior_idx_cpu[idx]])
 
         if fix_ignored:
-            for j, prior_idx_for_one_gt in enumerate(prior_idx_cpu_list):
-                for k, value_idx in enumerate(prior_idx_for_one_gt):
+            for j, prior_idx_on_one_gt in enumerate(prior_idx_cpu_list):
+                for k, value_idx in enumerate(prior_idx_on_one_gt):
                     if value_idx == prior_idx_cpu[idx]:
-                        prior_overlaps_cpu_list[j, k] = 0.0
+                        prior_overlaps_cpu_list[j, k] = -1
+                        break
 
     best_prior_overlap = torch.tensor(best_prior_overlap)
     best_prior_idx = torch.tensor(best_prior_idx)
