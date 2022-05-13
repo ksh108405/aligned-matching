@@ -89,8 +89,8 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
             for j in ignored_prior_idx:
                 ignored_idx += [np.where(prior_idx_cpu == ignored_prior_idx)]
             print(f'before = {prior_idx_cpu.shape}')
-            np.delete(prior_overlaps_cpu, ignored_idx)
-            np.delete(prior_idx_cpu, ignored_idx)
+            prior_overlaps_cpu = np.delete(prior_overlaps_cpu, ignored_idx)
+            prior_idx_cpu = np.delete(prior_idx_cpu, ignored_idx)
             print(f'after = {prior_idx_cpu.shape}')
 
         # select default box with maximum IoU.
