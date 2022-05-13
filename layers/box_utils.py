@@ -74,24 +74,17 @@ def jaccard(box_a, box_b):
 
 def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignored=False, only_1a=False):
     prior_overlaps, prior_idx = overlap.sort(1, descending=True)
+    prior_overlaps_cpu_list = prior_overlaps.cpu().numpy()
+    prior_idx_cpu_list = prior_idx.cpu().numpy()
+    truths_cpu_list = truths.cpu().numpy()
 
     best_prior_overlap = []
     best_prior_idx = []
 
-    ignored_prior_idx = []
-
-    for i in range(prior_overlaps.shape[0]):
-        prior_overlaps_cpu = prior_overlaps[i].cpu().numpy()
-        prior_idx_cpu = prior_idx[i].cpu().numpy()
-        truths_cpu = truths[i].cpu().numpy()
-        if fix_ignored:
-            ignored_idx = []
-            for j in ignored_prior_idx:
-                ignored_idx += [np.where(prior_idx_cpu == ignored_prior_idx)]
-            print(f'before = {prior_idx_cpu.shape}')
-            prior_overlaps_cpu = np.delete(prior_overlaps_cpu, ignored_idx)
-            prior_idx_cpu = np.delete(prior_idx_cpu, ignored_idx)
-            print(f'after = {prior_idx_cpu.shape}')
+    for i in range(prior_overlaps_cpu_list.shape[0]):
+        prior_overlaps_cpu = prior_overlaps_cpu_list[i]
+        prior_idx_cpu = prior_idx_cpu_list[i]
+        truths_cpu = truths_cpu_list[i]
 
         # select default box with maximum IoU.
         max_prior_overlap = prior_overlaps_cpu[0]
@@ -159,14 +152,19 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
         idx = np.argmin(center_dist)
         best_prior_overlap.append([prior_overlaps_cpu[idx]])
         best_prior_idx.append([prior_idx_cpu[idx]])
+
         if fix_ignored:
-            ignored_prior_idx.append(prior_idx_cpu[idx])
+            for j, prior_idx_for_one_gt in enumerate(prior_idx_cpu_list):
+                for k, value_idx in enumerate(prior_idx_for_one_gt):
+                    if value_idx == prior_idx_cpu[idx]:
+                        prior_overlaps_cpu_list[j, k] = 0.0
+
     best_prior_overlap = torch.tensor(best_prior_overlap)
     best_prior_idx = torch.tensor(best_prior_idx)
     return best_prior_overlap, best_prior_idx
 
 
-def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matching, cfg):
+def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matching, cfg, fix_loss=True):
     """Match each prior box with the ground truth box of the highest jaccard
     overlap, encode the bounding boxes, then return the matched indices
     corresponding to both confidence and location preds.
@@ -218,10 +216,8 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
 
     # Start visualization code
-    """
+
     import cv2
-    import math
-    from data.config import tt100k
 
     img = np.zeros((1000, 1000, 3), np.uint8)
     obj_idx = 0
@@ -246,12 +242,12 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
         img = cv2.rectangle(img, (int(truth[0] * 1000), int(truth[1] * 1000)),
                             (int(truth[2] * 1000), int(truth[3] * 1000)), (0, 255, 0), 3)
 
-    # cv2.imwrite(
-    #     f'./matching_output/aligned2_0.10/{int(truth[0] * 1000)},{int(truth[1] * 1000)},'
-    #     f'{int(truth[2] * 1000)},{int(truth[3] * 1000)}.png', img)  # 이미지 저장
-    cv2.imshow('bbox', img)
-    cv2.waitKey(2000)
-    """
+    cv2.imwrite(
+        f'./matching_output/aligned3_0.10/{int(truth[0] * 1000)},{int(truth[1] * 1000)},'
+        f'{int(truth[2] * 1000)},{int(truth[3] * 1000)}.png', img)  # 이미지 저장
+    # cv2.imshow('bbox', img)
+    # cv2.waitKey(2000)
+
     # End visualization code
     best_truth_idx.squeeze_(0)
     best_truth_overlap.squeeze_(0)
@@ -259,21 +255,24 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     best_prior_overlap.squeeze_(1)
     best_truth_overlap.index_fill_(0, best_prior_idx, 2)  # ensure best prior
 
-    # set matched box coordinate to prior box data.
-    matches = priors
-    # for each ground truth,
-    for j in range(best_prior_idx.size(0)):
-        # ensure every gt matches with its prior of max overlap
-        best_truth_idx[best_prior_idx[j]] = j
-        # write ground truth data on matched default box.
-        matches[best_prior_idx[j]] = truths[j]
-        # write ground truth data on default box which has iou over threshold.
-        multi_matching_idx = torch.where(best_truth_overlap >= threshold)
-        for k in multi_matching_idx[0]:
-            matches[k] = truths[best_truth_idx[k]]
-
-    # matches = truths[best_truth_idx]  # Shape: [num_priors,4]
-
+    if fix_loss:
+        # set matched box coordinate to prior box data.
+        matches = point_form(priors)
+        # for each ground truth,
+        for j in range(best_prior_idx.size(0)):
+            # ensure every gt matches with its prior of max overlap
+            best_truth_idx[best_prior_idx[j]] = j
+            # write ground truth data on matched default box.
+            matches[best_prior_idx[j]] = truths[j]
+            # write ground truth data on default box which has iou over threshold.
+            multi_matching_idx = torch.where(best_truth_overlap >= threshold)
+            for k in multi_matching_idx[0]:
+                matches[k] = truths[best_truth_idx[k]]
+    else:
+        for j in range(best_prior_idx.size(0)):
+            # ensure every gt matches with its prior of max overlap
+            best_truth_idx[best_prior_idx[j]] = j
+        matches = truths[best_truth_idx]  # Shape: [num_priors,4]
 
     conf = labels[best_truth_idx] + 1  # Shape: [num_priors]
     conf[best_truth_overlap < threshold] = 0  # label as background
