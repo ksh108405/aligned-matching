@@ -31,7 +31,7 @@ class MultiBoxLoss(nn.Module):
 
     def __init__(self, num_classes, overlap_thresh, prior_for_matching,
                  bkg_label, neg_mining, neg_pos, neg_overlap, encode_target, cfg,
-                 use_gpu=True, matching='legacy'):
+                 use_gpu=True, matching='legacy', fix_loss=False):
         super(MultiBoxLoss, self).__init__()
         self.use_gpu = use_gpu
         self.num_classes = num_classes
@@ -45,6 +45,7 @@ class MultiBoxLoss(nn.Module):
         self.variance = cfg['variance']
         self.matching = matching
         self.cfg = cfg
+        self.fix_loss = fix_loss
 
     def forward(self, predictions, targets):
         """Multibox Loss
@@ -72,7 +73,7 @@ class MultiBoxLoss(nn.Module):
             labels = targets[idx][:, -1].data
             defaults = priors.data
             match(self.threshold, truths, defaults, self.variance, labels,
-                  loc_t, conf_t, idx, self.matching, self.cfg)
+                  loc_t, conf_t, idx, self.matching, self.cfg, self.fix_loss)
         if self.use_gpu:
             loc_t = loc_t.cuda()
             conf_t = conf_t.cuda()

@@ -169,7 +169,7 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
     return best_prior_overlap, best_prior_idx
 
 
-def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matching, cfg, fix_loss=True):
+def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matching, cfg, fix_loss=False):
     """Match each prior box with the ground truth box of the highest jaccard
     overlap, encode the bounding boxes, then return the matched indices
     corresponding to both confidence and location preds.
@@ -221,7 +221,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
 
     # Start visualization code
-
+    """
     import cv2
 
     img = np.zeros((1000, 1000, 3), np.uint8)
@@ -252,7 +252,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
         f'{int(truth[2] * 1000)},{int(truth[3] * 1000)}.png', img)  # 이미지 저장
     # cv2.imshow('bbox', img)
     # cv2.waitKey(2000)
-
+    """
     # End visualization code
     best_truth_idx.squeeze_(0)
     best_truth_overlap.squeeze_(0)

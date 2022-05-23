@@ -18,7 +18,7 @@ from torchinfo import summary
 
 
 def str2bool(v):
-    return v.lower() in ("yes", "true", "t", "1")
+    return v.lower() in ("yes", "true", "t", "1", "True")
 
 
 parser = argparse.ArgumentParser(
@@ -59,12 +59,16 @@ parser.add_argument('--train_set', default='trainval',
                     help='used for divide train or test')
 parser.add_argument('--optimizer', default='SGD', choices=['SGD', 'Adam'],
                     help='Whether to use SGD or Adam optimizer.')
-parser.add_argument('--augmentation', default=True,
+parser.add_argument('--augmentation', default=True, type=str2bool,
                     help='Whether to take augmentation process.')
-parser.add_argument('--shuffle', default=True,
+parser.add_argument('--shuffle', default=True, type=str2bool,
                     help='set to True to have the data reshuffled at every epoch.')
-parser.add_argument('--one_epoch', default=False,
+parser.add_argument('--one_epoch', default=False, type=str2bool,
                     help='Only iterate for one epoch.')
+parser.add_argument('--fix_loss', default=False, type=str2bool,
+                    help='Fix localization loss bugs.')
+parser.add_argument('--ensure_size', default=None, type=int,
+                    help='Ensure conv4_3 default box size.')
 args = parser.parse_args()
 
 
@@ -101,6 +105,14 @@ def train():
                                 transform=SSDAugmentation(cfg['min_dim'], MEANS, args.augmentation))
     else:
         raise Exception('Select on VOC or TT100K or COCO.')
+
+    if args.ensure_size is not None:
+        if args.dataset == 'VOC':
+            assert VOC_CONV4_3_SIZE == args.ensure_size
+        if args.dataset == 'TT100K':
+            assert TT100K_CONV4_3_SIZE == args.ensure_size
+        if args.dataset == 'COCO':
+            assert COCO_CONV4_3_SIZE == args.ensure_size
 
     if args.visdom:
         import visdom
@@ -141,7 +153,7 @@ def train():
                                weight_decay=args.weight_decay,
                                amsgrad=True)  # use adam for tt100k training
     criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
-                             False, cfg, args.cuda, matching=args.matching_strategy)
+                             False, cfg, args.cuda, matching=args.matching_strategy, fix_loss=args.fix_loss)
 
     net.train()
 
