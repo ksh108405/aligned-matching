@@ -67,7 +67,7 @@ parser.add_argument('--one_epoch', default=False, type=str2bool,
                     help='Only iterate for one epoch.')
 parser.add_argument('--fix_loss', default=False, type=str2bool,
                     help='Fix localization loss bugs.')
-parser.add_argument('--ensure_size', default=None, type=int,
+parser.add_argument('--ensure_size', default=None, type=float,
                     help='Ensure conv4_3 default box size.')
 args = parser.parse_args()
 
