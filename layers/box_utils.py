@@ -4,6 +4,7 @@ import numpy as np
 from utils.get_detected_info import get_anchor_nums, get_anchor_box_size
 
 prior_info = 0
+min_area = None
 
 
 def point_form(boxes):
@@ -189,12 +190,27 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     """
     global prior_sizes
     global prior_info
+    global min_area
 
-    # jaccard index
-    overlaps = jaccard(
-        truths,
-        point_form(priors)
-    )
+    if matching == 'resized':
+        if min_area is None:
+            min_box = torch.cat((priors[0, :2], priors[0, 2:])).cpu().numpy()
+            min_area = np.around(min_box[2] * min_box[3], 5)
+        truths_resized = torch.tensor(truths)
+        for i, truth in enumerate(truths_resized):
+            gt_area = torch.abs((truth[0] - truth[2]) * (truth[1] - truth[3]))
+            if gt_area < min_area:
+                gt_multiplier = torch.sqrt(min_area / gt_area)
+                gt_cx = (truth[0] + truth[2]) / 2.
+                gt_cy = (truth[1] + truth[3]) / 2.
+                gt_w = torch.abs(truth[0] - truth[2]) * gt_multiplier / 2.
+                gt_h = torch.abs(truth[1] - truth[3]) * gt_multiplier / 2.
+                gt_resized = torch.tensor([gt_cx - gt_w, gt_cy - gt_h, gt_cx + gt_w, gt_cy + gt_h])
+                truths_resized[i] = gt_resized
+        overlaps = jaccard(truths_resized, point_form(priors))
+    else:
+        # jaccard index
+        overlaps = jaccard(truths, point_form(priors))
 
     if prior_info == 0:  # at first execution of match
         prior_sizes = center_size(priors).cpu().numpy()
@@ -204,7 +220,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
 
     # (Bipartite Matching)
     # [1,num_objects] best prior for each ground truth
-    if matching == 'legacy':
+    if matching == 'legacy' or matching == 'resized':
         best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
     elif matching == 'aligned':
         # use aligned matching
@@ -280,7 +296,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
         matches = truths[best_truth_idx]  # Shape: [num_priors,4]
 
     conf = labels[best_truth_idx] + 1  # Shape: [num_priors]
-    conf[best_truth_overlap < threshold] = 0  # label as background
+    conf[best_truth_overlap < threshold] = 0  # label as background (multi-matching)
     loc = encode(matches, priors, variances)
     loc_t[idx] = loc  # [num_priors,4] encoded offsets to learn
     conf_t[idx] = conf  # [num_priors] top class label for each prior
