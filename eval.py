@@ -24,6 +24,7 @@ import numpy as np
 import pickle
 import cv2
 import shutil
+import random
 
 if sys.version_info[0] == 2:
     import xml.etree.cElementTree as ET
@@ -56,8 +57,18 @@ parser.add_argument('--network_size', default=512, type=int,
                     help='SSD network size (only 300, 512 and 1024 are supported)')
 parser.add_argument('--test_set', default='test', type=str,
                     help='TT100K test set name')
-
 args = parser.parse_args()
+
+random.seed(3407)
+np.random.seed(3407)
+os.environ['PYTHONHASHSEED'] = '3407'
+torch.manual_seed(3407)
+torch.cuda.manual_seed(3407)
+torch.cuda.manual_seed_all(3407)
+torch.use_deterministic_algorithms(True)
+# torch.backends.cudnn.benchmark = False
+# torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.enabled = False
 
 if not os.path.exists(args.save_folder):
     os.mkdir(args.save_folder)

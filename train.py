@@ -14,6 +14,7 @@ import torch.nn.init as init
 import torch.utils.data as data
 import numpy as np
 import argparse
+import random
 from torchinfo import summary
 
 
@@ -61,7 +62,7 @@ parser.add_argument('--optimizer', default='SGD', choices=['SGD', 'Adam'],
                     help='Whether to use SGD or Adam optimizer.')
 parser.add_argument('--augmentation', default=True, type=str2bool,
                     help='Whether to take augmentation process.')
-parser.add_argument('--shuffle', default=True, type=str2bool,
+parser.add_argument('--shuffle', default=False, type=str2bool,
                     help='set to True to have the data reshuffled at every epoch.')
 parser.add_argument('--one_epoch', default=False, type=str2bool,
                     help='Only iterate for one epoch.')
@@ -69,8 +70,35 @@ parser.add_argument('--fix_loss', default=False, type=str2bool,
                     help='Fix localization loss bugs.')
 parser.add_argument('--ensure_size', default=None, type=float,
                     help='Ensure conv4_3 default box size.')
+parser.add_argument('--multi_matching', default=True, type=str2bool,
+                    help='Enable multi matching after bipartite matching.')
+parser.add_argument('--multi_thresh', default=0.5, type=float,
+                    help='Threshold IoU value of multi-matching algorithm.')
+parser.add_argument('--saved_matching', default=False, type=str2bool,
+                    help='Use saved multi-matching.')
+parser.add_argument('--saved_conf_loc', default=False, type=str2bool,
+                    help='Use saved whole matching.')
+parser.add_argument('--relative_multi', default=False, type=float,
+                    help='Change multi matching to relative')
 args = parser.parse_args()
 
+# For reproducible output (Added after 22.07.08 01:33:04 KST)
+random.seed(3407)
+np.random.seed(3407)
+os.environ['PYTHONHASHSEED'] = '3407'
+torch.manual_seed(3407)
+torch.cuda.manual_seed(3407)
+torch.cuda.manual_seed_all(3407)
+torch.use_deterministic_algorithms(True)
+# torch.backends.cudnn.benchmark = False
+# torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.enabled = False
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+g = torch.Generator(device='cuda')
+g.manual_seed(3407)
 
 if torch.cuda.is_available():
     if args.cuda:
@@ -152,8 +180,10 @@ def train():
         optimizer = optim.Adam(net.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08,
                                weight_decay=args.weight_decay,
                                amsgrad=True)  # use adam for tt100k training
-    criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
-                             False, cfg, args.cuda, matching=args.matching_strategy, fix_loss=args.fix_loss)
+    criterion = MultiBoxLoss(cfg['num_classes'], args.multi_thresh, True, 0, True, 3, 0.5,
+                             False, cfg, args.cuda, matching=args.matching_strategy, fix_loss=args.fix_loss,
+                             multi_matching=args.multi_matching, saved_matching=args.saved_matching,
+                             saved_conf_loc=args.saved_conf_loc, relative_multi=args.relative_multi)
 
     net.train()
 
@@ -185,7 +215,7 @@ def train():
     data_loader = data.DataLoader(dataset, args.batch_size,
                                   num_workers=args.num_workers,
                                   shuffle=args.shuffle, collate_fn=detection_collate,
-                                  pin_memory=True)
+                                  pin_memory=True, worker_init_fn=seed_worker, generator=g)
     # create batch iterator
     batch_iterator = iter(data_loader)
     for iteration in range(args.start_iter, cfg['max_iter'] + 1):
@@ -252,7 +282,7 @@ def train():
                 weight_path += '_add'
             torch.save(ssd_net.state_dict(), weight_path + '.pth')
 
-        if args.one_epoch and iteration > epoch_size:
+        if args.one_epoch and iteration > epoch_size + 1:
             print('One epoch reached: exiting training...')
             return 0
     torch.save(ssd_net.state_dict(),

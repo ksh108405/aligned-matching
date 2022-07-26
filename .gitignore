@@ -126,3 +126,6 @@ data/ssd_dataloader.py
 
 # pylint
 .pylintrc
+/saved_conf_loc.pickle
+/saved_multimatch.pickle
+/vgg16_reducedfc.pth

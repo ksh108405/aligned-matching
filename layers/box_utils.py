@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 import torch
 import numpy as np
+import pickle
 from utils.get_detected_info import get_anchor_nums, get_anchor_box_size
 
 prior_info = 0
 min_area = None
-
+saved_matching = {}
+saved_conf_loc = {}
 
 def point_form(boxes):
     """ Convert prior_boxes to (xmin, ymin, xmax, ymax)
@@ -170,7 +172,8 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
     return best_prior_overlap, best_prior_idx
 
 
-def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matching, cfg, fix_loss=False):
+def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matching, cfg, fix_loss=False,
+          multi_matching=True, use_saved=False, use_saved_conf_loc=False, relative_multi=False):
     """Match each prior box with the ground truth box of the highest jaccard
     overlap, encode the bounding boxes, then return the matched indices
     corresponding to both confidence and location preds.
@@ -191,12 +194,30 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     global prior_sizes
     global prior_info
     global min_area
+    global saved_matching
+    global saved_conf_loc
+
+    if use_saved is True and saved_matching == {}:
+        with open('saved_multimatch.pickle', 'rb') as fr:
+            saved_matching = pickle.load(fr)
+
+    if use_saved_conf_loc is True:
+        if saved_conf_loc == {}:
+            with open('saved_conf_loc.pickle', 'rb') as fr:
+                saved_conf_loc = pickle.load(fr)
+        matching_info = saved_conf_loc[truths.cpu().numpy().tobytes()]
+        conf = matching_info[0]
+        matches = matching_info[1]
+        loc = encode(matches, priors, variances)
+        loc_t[idx] = loc  # [num_priors,4] encoded offsets to learn
+        conf_t[idx] = conf  # [num_priors] top class label for each prior
+        return
 
     if matching == 'resized':
         if min_area is None:
             min_box = torch.cat((priors[0, :2], priors[0, 2:])).cpu().numpy()
             min_area = np.around(min_box[2] * min_box[3], 5)
-        truths_resized = torch.tensor(truths)
+        truths_resized = truths.clone().detach()
         for i, truth in enumerate(truths_resized):
             gt_area = torch.abs((truth[0] - truth[2]) * (truth[1] - truth[3]))
             if gt_area < min_area:
@@ -296,10 +317,41 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
         matches = truths[best_truth_idx]  # Shape: [num_priors,4]
 
     conf = labels[best_truth_idx] + 1  # Shape: [num_priors]
-    conf[best_truth_overlap < threshold] = 0  # label as background (multi-matching)
+    if saved_matching != {}:
+        # label stored prior indices as background (except 1:1 matched box)
+        multi_mask = saved_matching[truths.cpu().numpy().tobytes()] & (best_truth_overlap < 1)
+        conf[multi_mask] = 0
+    elif relative_multi:
+        for best_iou in best_prior_overlap:
+            conf[overlaps > (relative_multi * best_iou)] = 0
+    elif multi_matching:
+        conf[best_truth_overlap < threshold] = 0  # label as background (multi-matching)
+        # multi-matching saving code start
+        """
+        old_len = len(saved_matching)
+        saved_matching[truths.cpu().numpy().tobytes()] = best_truth_overlap < threshold
+        new_len = len(saved_matching)
+        if new_len == old_len:
+            with open('saved_multimatch.pickle', 'wb') as fw:
+                pickle.dump(saved_matching, fw)
+        """
+        # multi-matching saving code end
+    else:
+        conf[best_truth_overlap < 1] = 0  # label all as background except 1:1 matched box
+
     loc = encode(matches, priors, variances)
     loc_t[idx] = loc  # [num_priors,4] encoded offsets to learn
     conf_t[idx] = conf  # [num_priors] top class label for each prior
+    # whole matching saving code start
+    """
+    old_len = len(saved_conf_loc)
+    saved_conf_loc[truths.cpu().numpy().tobytes()] = [conf, matches]
+    new_len = len(saved_conf_loc)
+    if new_len == old_len:
+        with open('saved_conf_loc.pickle', 'wb') as fw:
+            pickle.dump(saved_conf_loc, fw)
+    """
+    # whole matching saving code end
 
 
 def encode(matched, priors, variances):
