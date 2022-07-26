@@ -87,7 +87,7 @@ def test_voc():
     testset = VOCDetection(args.voc_root, [('2007', 'test')], None, VOCAnnotationTransform())
     if args.cuda:
         net = net.cuda()
-        cudnn.benchmark = True
+        # cudnn.benchmark = True
     # evaluation
     test_net(args.save_folder, net, args.cuda, testset,
              BaseTransform(net.size, (104, 117, 123)),

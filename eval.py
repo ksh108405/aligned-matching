@@ -66,9 +66,9 @@ torch.manual_seed(3407)
 torch.cuda.manual_seed(3407)
 torch.cuda.manual_seed_all(3407)
 torch.use_deterministic_algorithms(True)
-# torch.backends.cudnn.benchmark = False
-# torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.enabled = False
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
+# torch.backends.cudnn.enabled = False
 
 if not os.path.exists(args.save_folder):
     os.mkdir(args.save_folder)
@@ -484,7 +484,7 @@ if __name__ == '__main__':
                                   TT100KAnnotationTransform())
     if args.cuda:
         net = net.cuda()
-        cudnn.benchmark = True
+        # cudnn.benchmark = True
     # evaluation
     test_net(args.save_folder, net, args.cuda, dataset,
              BaseTransform(net.size, dataset_mean), args.top_k, 300,

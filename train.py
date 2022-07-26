@@ -39,6 +39,8 @@ parser.add_argument('--num_workers', default=4, type=int,
                     help='Number of workers used in dataloading')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use CUDA to train model')
+parser.add_argument('--gpu_id', default='0', type=str,
+                    help='ID of GPU to use during training')
 parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float,
                     help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float,
@@ -59,25 +61,27 @@ parser.add_argument('--matching_strategy', default='legacy',
 parser.add_argument('--train_set', default='trainval',
                     help='used for divide train or test')
 parser.add_argument('--optimizer', default='SGD', choices=['SGD', 'Adam'],
-                    help='Whether to use SGD or Adam optimizer.')
+                    help='Whether to use SGD or Adam optimizer')
 parser.add_argument('--augmentation', default=True, type=str2bool,
-                    help='Whether to take augmentation process.')
+                    help='Whether to take augmentation process')
 parser.add_argument('--shuffle', default=False, type=str2bool,
-                    help='set to True to have the data reshuffled at every epoch.')
+                    help='set to True to have the data reshuffled at every epoch')
 parser.add_argument('--one_epoch', default=False, type=str2bool,
-                    help='Only iterate for one epoch.')
+                    help='Only iterate for one epoch')
 parser.add_argument('--fix_loss', default=False, type=str2bool,
-                    help='Fix localization loss bugs.')
+                    help='Fix localization loss bugs')
 parser.add_argument('--ensure_size', default=None, type=float,
-                    help='Ensure conv4_3 default box size.')
+                    help='Ensure conv4_3 default box size')
+parser.add_argument('--ensure_archi', default=None, type=int,
+                    help='Ensure SSD architecture')
 parser.add_argument('--multi_matching', default=True, type=str2bool,
-                    help='Enable multi matching after bipartite matching.')
+                    help='Enable multi matching after bipartite matching')
 parser.add_argument('--multi_thresh', default=0.5, type=float,
-                    help='Threshold IoU value of multi-matching algorithm.')
+                    help='Threshold IoU value of multi-matching algorithm')
 parser.add_argument('--saved_matching', default=False, type=str2bool,
-                    help='Use saved multi-matching.')
+                    help='Use saved multi-matching')
 parser.add_argument('--saved_conf_loc', default=False, type=str2bool,
-                    help='Use saved whole matching.')
+                    help='Use saved whole matching')
 parser.add_argument('--relative_multi', default=False, type=float,
                     help='Change multi matching to relative')
 args = parser.parse_args()
@@ -90,15 +94,21 @@ torch.manual_seed(3407)
 torch.cuda.manual_seed(3407)
 torch.cuda.manual_seed_all(3407)
 torch.use_deterministic_algorithms(True)
-# torch.backends.cudnn.benchmark = False
-# torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.enabled = False
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
+# torch.backends.cudnn.enabled = False
 def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
 g = torch.Generator(device='cuda')
 g.manual_seed(3407)
+
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
+
+print('Count of using GPUs:', torch.cuda.device_count())
+print('Current cuda device:', torch.cuda.current_device())
 
 if torch.cuda.is_available():
     if args.cuda:
@@ -142,6 +152,14 @@ def train():
         if args.dataset == 'COCO':
             assert COCO_CONV4_3_SIZE == args.ensure_size
 
+    if args.ensure_archi is not None:
+        if args.dataset == 'VOC':
+            assert VOC_NETWORK_SIZE == args.ensure_archi
+        if args.dataset == 'TT100K':
+            assert TT100K_NETWORK_SIZE == args.ensure_archi
+        if args.dataset == 'COCO':
+            assert COCO_NETWORK_SIZE == args.ensure_archi
+
     if args.visdom:
         import visdom
         global viz
@@ -152,8 +170,8 @@ def train():
     net = ssd_net
 
     if args.cuda:
-        net = torch.nn.DataParallel(ssd_net)
-        cudnn.benchmark = True
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        net = ssd_net.to(device)
 
     if args.resume:
         print('Resuming training, loading {}...'.format(args.resume))
@@ -162,9 +180,6 @@ def train():
         vgg_weights = torch.load(args.basenet)
         print('Loading base network...')
         ssd_net.vgg.load_state_dict(vgg_weights)
-
-    if args.cuda:
-        net = net.cuda()
 
     if not args.resume:
         print('Initializing weights...')
