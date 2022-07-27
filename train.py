@@ -86,6 +86,9 @@ parser.add_argument('--relative_multi', default=False, type=float,
                     help='Change multi matching to relative')
 args = parser.parse_args()
 
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
+
 # For reproducible output (Added after 22.07.08 01:33:04 KST)
 random.seed(3407)
 np.random.seed(3407)
@@ -103,9 +106,6 @@ def seed_worker(worker_id):
     random.seed(worker_seed)
 g = torch.Generator(device='cuda')
 g.manual_seed(3407)
-
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
 print('Count of using GPUs:', torch.cuda.device_count())
 print('Current cuda device:', torch.cuda.current_device())

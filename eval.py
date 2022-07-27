@@ -49,6 +49,8 @@ parser.add_argument('--top_k', default=5, type=int,
                     help='Further restrict the number of predictions to parse')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use cuda to train model')
+parser.add_argument('--gpu_id', default='0', type=str,
+                    help='ID of GPU to use during evaluation')
 parser.add_argument('--dataset', default=VOC_ROOT,
                     help='Name of dataset to evaluate')
 parser.add_argument('--cleanup', default=True, type=str2bool,
@@ -58,6 +60,9 @@ parser.add_argument('--network_size', default=512, type=int,
 parser.add_argument('--test_set', default='test', type=str,
                     help='TT100K test set name')
 args = parser.parse_args()
+
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
 random.seed(3407)
 np.random.seed(3407)
@@ -458,7 +463,7 @@ if __name__ == '__main__':
                     elif os.path.isdir(file_path):
                         shutil.rmtree(file_path)
                 except Exception as e:
-                    print('Failed to delete %s. Reason: %s' % (file_path, e))
+                    raise Exception('Failed to delete %s. Reason: %s' % (file_path, e))
     # load net
     if args.dataset == 'VOC':
         labelmap = VOC_CLASSES
@@ -484,7 +489,6 @@ if __name__ == '__main__':
                                   TT100KAnnotationTransform())
     if args.cuda:
         net = net.cuda()
-        # cudnn.benchmark = True
     # evaluation
     test_net(args.save_folder, net, args.cuda, dataset,
              BaseTransform(net.size, dataset_mean), args.top_k, 300,
