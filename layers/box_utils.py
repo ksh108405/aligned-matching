@@ -2,6 +2,7 @@
 import torch
 import numpy as np
 import pickle
+import time
 from utils.get_detected_info import get_anchor_nums, get_anchor_box_size
 
 prior_info = 0
@@ -82,16 +83,31 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
     best_prior_overlap = None
     best_prior_idx = None
 
+    DISPLAY_TIMER = True
+
+    if DISPLAY_TIMER:
+        process_time = [.0, .0, .0, .0, .0, .0]
+        matching_start = time.time()
+
     for i in range(prior_overlaps_whole.shape[0]):
+        if DISPLAY_TIMER:
+            start = time.time()
+
         prior_overlaps = prior_overlaps_whole[i]
         prior_idx = prior_idx_whole[i]
         truths_t = truths_whole[i]
+        if DISPLAY_TIMER:
+            process_time[0] += time.time() - start
+            start = time.time()
 
         # select default box with maximum IoU.
         max_prior_overlap = prior_overlaps[0]
         allowed_priors = prior_overlaps.ge(max_prior_overlap - threshold)
         prior_overlaps = torch.masked_select(prior_overlaps, allowed_priors)
         prior_idx = torch.masked_select(prior_idx, allowed_priors)
+        if DISPLAY_TIMER:
+            process_time[1] += time.time() - start
+            start = time.time()
 
         # select default box with similar ratio with ground truth.
         allowed_priors = []
@@ -115,6 +131,11 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
         else:
             ratio_list = torch.tensor([1, -100, 2, 0.5, 3, 1 / 3])
             gt_ratios = torch.argmin(torch.abs(ratio_list - truth_ratio))
+        if DISPLAY_TIMER:
+            process_time[2] += time.time() - start
+            start = time.time()
+
+
         for i, prior_id in enumerate(prior_idx):
             prior_ratio = get_anchor_box_size(prior_id, cfg['feature_maps'], cfg['aspect_ratios'])
             if fix_ratio:
@@ -137,6 +158,9 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
         if allowed_priors:
             prior_overlaps = prior_overlaps[allowed_priors]
             prior_idx = prior_idx[allowed_priors]
+        if DISPLAY_TIMER:
+            process_time[3] += time.time() - start
+            start = time.time()
 
         # select default box which nearest with ground truth.
         center_sizes = prior_sizes[prior_idx]
@@ -150,6 +174,9 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
         else:
             best_prior_overlap = torch.cat([best_prior_overlap, prior_overlaps[idx].unsqueeze(dim=0)])
             best_prior_idx = torch.cat([best_prior_idx, prior_idx[idx].unsqueeze(dim=0)])
+        if DISPLAY_TIMER:
+            process_time[4] += time.time() - start
+            start = time.time()
 
         if fix_ignored:
             for j, prior_idx_on_one_gt in enumerate(prior_idx_whole):
@@ -157,7 +184,17 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
                     if value_idx == prior_idx[idx]:
                         prior_overlaps_whole[j, k] = -1
                         break
+        if DISPLAY_TIMER:
+            process_time[5] += time.time() - start
 
+    if DISPLAY_TIMER:
+        print(f'Total Time = {time.time() - matching_start} sec')
+        print(f'initialization = {process_time[0]} sec')
+        print(f'maximum iou = {process_time[1]} sec')
+        print(f'equal ratio - init = {process_time[2]} sec')
+        print(f'equal ratio - calc = {process_time[3]} sec')
+        print(f'minimum distance = {process_time[4]} sec')
+        print(f'bipartite process = {process_time[5]} sec')
     return best_prior_overlap, best_prior_idx
 
 
