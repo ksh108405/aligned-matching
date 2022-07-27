@@ -77,16 +77,19 @@ def jaccard(box_a, box_b):
 
 
 def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignored=False, only_1a=False):
+    DISPLAY_TIMER = True
+
+    if DISPLAY_TIMER:
+        process_time = [.0, .0, .0, .0, .0, .0]
+        init = time.time()
     prior_overlaps_whole, prior_idx_whole = overlap.sort(1, descending=True)
     truths_whole = truths.clone().detach()
 
     best_prior_overlap = None
     best_prior_idx = None
 
-    DISPLAY_TIMER = True
-
     if DISPLAY_TIMER:
-        process_time = [.0, .0, .0, .0, .0, .0]
+        init = time.time() - init
         matching_start = time.time()
 
     for i in range(prior_overlaps_whole.shape[0]):
@@ -189,6 +192,7 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
 
     if DISPLAY_TIMER:
         print(f'Total Time = {time.time() - matching_start} sec')
+        print(f'Matching Init = {init} sec')
         print(f'initialization = {process_time[0]} sec')
         print(f'maximum iou = {process_time[1]} sec')
         print(f'equal ratio - init = {process_time[2]} sec')
