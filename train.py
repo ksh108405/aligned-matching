@@ -62,6 +62,8 @@ parser.add_argument('--train_set', default='trainval',
                     help='used for divide train or test')
 parser.add_argument('--optimizer', default='SGD', choices=['SGD', 'Adam'],
                     help='Whether to use SGD or Adam optimizer')
+parser.add_argument('--time_verbose', default=False, type=float,
+                    help='Print more specific training time')
 parser.add_argument('--augmentation', default=True, type=str2bool,
                     help='Whether to take augmentation process')
 parser.add_argument('--shuffle', default=False, type=str2bool,
@@ -107,7 +109,7 @@ def seed_worker(worker_id):
 g = torch.Generator(device='cuda')
 g.manual_seed(3407)
 
-print('Count of using GPUs:', torch.cuda.device_count())
+print('Number of available GPUs:', torch.cuda.device_count())
 print('Current cuda device:', torch.cuda.current_device())
 
 if torch.cuda.is_available():
@@ -170,8 +172,9 @@ def train():
     net = ssd_net
 
     if args.cuda:
+        net = nn.DataParallel(ssd_net)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        net = ssd_net.to(device)
+        net = net.to(device)
 
     if args.resume:
         print('Resuming training, loading {}...'.format(args.resume))
@@ -273,18 +276,29 @@ def train():
         # forward
         t0 = time.time()
         out = net(images)
+        if args.time_verbose:
+            t_1 = time.time()
         # backprop
         optimizer.zero_grad()
         loss_l, loss_c = criterion(out, targets)
         loss = loss_l + loss_c
+        if args.time_verbose:
+            t_2 = time.time()
         loss.backward()
+        if args.time_verbose:
+            t_3 = time.time()
         optimizer.step()
         t1 = time.time()
         loc_loss += loss_l.data
         conf_loss += loss_c.data
 
         if iteration % 1 == 0:
-            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % loss.data + ' timer: %.4f sec.' % (t1 - t0))
+            if args.time_verbose:
+                print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % loss.data + ' forward: %.4f sec.' % (t_1 - t0) +
+                      ' loss calc: %.4f sec.' % (t_2 - t_1) + ' backward: %.4f sec.' % (t_3 - t_2) +
+                      ' weight update: %.4f sec.' % (t1 - t_3))
+            else:
+                print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % loss.data + ' timer: %.4f sec.' % (t1 - t0))
 
         if args.visdom:
             update_vis_plot(iteration, loss_l.data, loss_c.data,
