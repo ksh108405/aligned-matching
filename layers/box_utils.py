@@ -202,6 +202,108 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
     return best_prior_overlap, best_prior_idx
 
 
+def aligned_matching_cuda(overlap, truths, threshold, cfg):
+    DISPLAY_TIMER = True
+
+    if DISPLAY_TIMER:
+        process_time = [.0, .0, .0, .0, .0, .0]
+        init = time.time()
+    prior_overlaps_whole, prior_idx_whole = overlap.sort(1, descending=True)
+    truths_whole = truths.clone().detach()
+
+    best_prior_overlap = None
+    best_prior_idx = None
+
+    if DISPLAY_TIMER:
+        init = time.time() - init
+        matching_start = time.time()
+
+    for i in range(prior_overlaps_whole.shape[0]):
+        if DISPLAY_TIMER:
+            start = time.time()
+
+        prior_overlaps = prior_overlaps_whole[i]
+        prior_idx = prior_idx_whole[i]
+        truths_t = truths_whole[i]
+        if DISPLAY_TIMER:
+            process_time[0] += time.time() - start
+            start = time.time()
+
+        # select default box with maximum IoU.
+        max_prior_overlap = prior_overlaps[0]
+        allowed_priors = prior_overlaps.ge(max_prior_overlap - threshold)
+        prior_overlaps = torch.masked_select(prior_overlaps, allowed_priors)
+        prior_idx = torch.masked_select(prior_idx, allowed_priors)
+        if DISPLAY_TIMER:
+            process_time[1] += time.time() - start
+            start = time.time()
+
+        # select default box with similar ratio with ground truth.
+        allowed_priors = []
+        truth_ratio = (truths_t[2] - truths_t[0]) / (truths_t[3] - truths_t[1])
+        ratio_list = torch.tensor([1, -100, 2, 0.5, 3, 1 / 3])
+        gt_ratios = torch.argmin(torch.abs(ratio_list - truth_ratio))
+        if DISPLAY_TIMER:
+            process_time[2] += time.time() - start
+            start = time.time()
+
+
+        for i, prior_id in enumerate(prior_idx):
+            prior_ratio = get_anchor_box_size(prior_id, cfg['feature_maps'], cfg['aspect_ratios'])
+            if prior_ratio == 1:  # append big 1:1 default box.
+                prior_ratio = 0
+            if prior_ratio == gt_ratios:
+                allowed_priors.append(i)
+            else:
+                # get types of default box ratio of each feature map.
+                anchor_size_list, accumulated_slice_list = get_anchor_nums(cfg['feature_maps'], cfg['aspect_ratios'])
+                for j, accumulated_slice in enumerate(accumulated_slice_list):
+                    if prior_id < accumulated_slice:
+                        break
+                # if ratio is out of range (ex. feature map with no 1:3, 3:1 default box)
+                if (anchor_size_list[j] - 1) < gt_ratios:
+                    # match 2:1 default box with 3:1 ground truth and so on...
+                    if get_anchor_box_size(prior_id, cfg['feature_maps'], cfg['aspect_ratios']) % 2 == gt_ratios % 2:
+                        allowed_priors.append(i)
+
+        if allowed_priors:
+            prior_overlaps = prior_overlaps[allowed_priors]
+            prior_idx = prior_idx[allowed_priors]
+        if DISPLAY_TIMER:
+            process_time[3] += time.time() - start
+            start = time.time()
+
+        # select default box which nearest with ground truth.
+        center_sizes = prior_sizes[prior_idx]
+        truth_cx = (truths_t[2] + truths_t[0]) / 2
+        truth_cy = (truths_t[3] + truths_t[1]) / 2
+        center_dist = torch.sqrt(torch.pow(center_sizes[:, 0] - truth_cx, 2) + torch.pow(center_sizes[:, 1] - truth_cy, 2))
+        idx = torch.argmin(center_dist)
+        if best_prior_overlap is None:
+            best_prior_overlap = prior_overlaps[idx].unsqueeze(dim=0)
+            best_prior_idx = prior_idx[idx].unsqueeze(dim=0)
+        else:
+            best_prior_overlap = torch.cat([best_prior_overlap, prior_overlaps[idx].unsqueeze(dim=0)])
+            best_prior_idx = torch.cat([best_prior_idx, prior_idx[idx].unsqueeze(dim=0)])
+        if DISPLAY_TIMER:
+            process_time[4] += time.time() - start
+            start = time.time()
+
+        if DISPLAY_TIMER:
+            process_time[5] += time.time() - start
+
+    if DISPLAY_TIMER:
+        print(f'Total Time = {time.time() - matching_start} sec')
+        print(f'Matching Init = {init} sec')
+        print(f'initialization = {process_time[0]} sec')
+        print(f'maximum iou = {process_time[1]} sec')
+        print(f'equal ratio - init = {process_time[2]} sec')
+        print(f'equal ratio - calc = {process_time[3]} sec')
+        print(f'minimum distance = {process_time[4]} sec')
+        print(f'bipartite process = {process_time[5]} sec')
+    return best_prior_overlap, best_prior_idx
+
+
 def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matching, cfg, fix_loss=False,
           multi_matching=True, use_saved=False, use_saved_conf_loc=False, relative_multi=False):
     """Match each prior box with the ground truth box of the highest jaccard
