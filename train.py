@@ -56,7 +56,7 @@ parser.add_argument('--save_folder', default='weights/',
 parser.add_argument('--weight_name', default='None_',
                     help='Saved weight name')
 parser.add_argument('--matching_strategy', default='legacy',
-                    choices=['legacy', 'aligned', 'aligned_2', 'aligned_1a', 'aligned_3', 'resized'],
+                    choices=['legacy', 'aligned', 'aligned_2', 'aligned_1a', 'aligned_3', 'resized', 'aligned_cuda'],
                     help='Select matching strategy (legacy or aligned or aligned_2)')
 parser.add_argument('--train_set', default='trainval',
                     help='used for divide train or test')
@@ -172,7 +172,6 @@ def train():
     net = ssd_net
 
     if args.cuda:
-        net = nn.DataParallel(ssd_net)
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         net = net.to(device)
 

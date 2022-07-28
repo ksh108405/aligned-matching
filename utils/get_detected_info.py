@@ -1,23 +1,27 @@
 from data.config import voc, tt100k, coco
-anchor_result = [0, 0, 0, 0, 0, 0]
-feature_result = [0, 0, 0, 0, 0, 0, 0]
+
+accumulated_slice_list = []
+slice_list = []
+anchor_size_list = []
 
 
 def get_anchor_nums(feature_map, anchor_box, square_anchor_num=2):
-    accumulated_slice_list = []
-    slice_list = []
-    anchor_size_list = []
-    before = 0
-    # square_anchor_num은 정사각형 앵커박스 개수 (0 or 1 or 2)
-    for feature, anchor in zip(feature_map, anchor_box):
-        # print(f'f : {feature}, a : {anchor}')
-        # anchor_size = 1:1, big 1:1, 2:1, 1:2, 1:3, 3:1 등등 앵커박스 총 갯수
-        anchor_size_list.append(len(anchor) * 2 + square_anchor_num)
-        # slice = 추론에 사용된 피쳐맵 넓이 * 앵커박스 총 갯수
-        slice_list.append(feature * feature * anchor_size_list[-1])
-        # accumulated_slice = 지금까지의 앵커박스의 총 갯수의 합
-        accumulated_slice_list.append(before + slice_list[-1])
-        before = accumulated_slice_list[-1]
+    global accumulated_slice_list
+    global slice_list
+    global anchor_size_list
+
+    if not accumulated_slice_list:
+        before = 0
+        # square_anchor_num은 정사각형 앵커박스 개수 (0 or 1 or 2)
+        for feature, anchor in zip(feature_map, anchor_box):
+            # print(f'f : {feature}, a : {anchor}')
+            # anchor_size = 1:1, big 1:1, 2:1, 1:2, 1:3, 3:1 등등 앵커박스 총 갯수
+            anchor_size_list.append(len(anchor) * 2 + square_anchor_num)
+            # slice = 추론에 사용된 피쳐맵 넓이 * 앵커박스 총 갯수
+            slice_list.append(feature * feature * anchor_size_list[-1])
+            # accumulated_slice = 지금까지의 앵커박스의 총 갯수의 합
+            accumulated_slice_list.append(before + slice_list[-1])
+            before = accumulated_slice_list[-1]
     return anchor_size_list, accumulated_slice_list
 
 
