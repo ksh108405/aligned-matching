@@ -220,7 +220,8 @@ def aligned_matching_cuda(overlap, truths, threshold, cfg):
             elif gt_ratios[i] == 5:
                 gt_ratios[i] = 3
         tmp = allowed_priors_idx[prior_ratio != gt_ratios[i]].squeeze()
-        allowed_priors[i].index_fill_(0, tmp, False)
+        if not tmp.numel() == allowed_priors_idx.numel():  # check matching ratio default boxes exist in allowed_priors
+            allowed_priors[i].index_fill_(0, tmp, False)
 
     # select default box which nearest with ground truth.
     for i in range(gt_ratios.size(0)):
@@ -308,7 +309,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
         overlaps = jaccard(truths, point_form(priors))
 
     if prior_info == 0:  # at first execution of match
-        if matching == 'aligned_cuda':
+        if matching == 'aligned':
             prior_sizes = center_size(priors)
         else:
             prior_sizes = center_size(priors).cpu().numpy()

@@ -15,6 +15,7 @@ import torch.utils.data as data
 import numpy as np
 import argparse
 import random
+from telegram_alerter import send_train_finished
 from torchinfo import summary
 
 
@@ -56,7 +57,7 @@ parser.add_argument('--save_folder', default='weights/',
 parser.add_argument('--weight_name', default='None_',
                     help='Saved weight name')
 parser.add_argument('--matching_strategy', default='legacy',
-                    choices=['legacy', 'aligned', 'aligned_2', 'aligned_1a', 'aligned_3', 'resized', 'aligned_cuda'],
+                    choices=['legacy', 'aligned_cpu', 'aligned_2_cpu', 'aligned_1a_cpu', 'aligned_3_cpu', 'resized', 'aligned'],
                     help='Select matching strategy (legacy or aligned or aligned_2)')
 parser.add_argument('--train_set', default='trainval',
                     help='used for divide train or test')
@@ -315,6 +316,8 @@ def train():
             return 0
     torch.save(ssd_net.state_dict(),
                args.save_folder + args.weight_name + '_full.pth')
+
+    send_train_finished(args.ensure_archi, args.matching_strategy, args.ensure_size, args.augmentation, args.dataset)
 
 
 def adjust_learning_rate(optimizer, gamma, step):
