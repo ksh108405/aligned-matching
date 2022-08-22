@@ -130,3 +130,4 @@ data/ssd_dataloader.py
 /saved_multimatch.pickle
 /vgg16_reducedfc.pth
 /telegram_alerter.py
+/.run/

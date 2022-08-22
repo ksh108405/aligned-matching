@@ -50,8 +50,6 @@ parser.add_argument('--weight_decay', default=5e-4, type=float,
                     help='Weight decay for SGD')
 parser.add_argument('--gamma', default=0.1, type=float,
                     help='Gamma update for SGD')
-parser.add_argument('--visdom', default=False, type=str2bool,
-                    help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='weights/',
                     help='Directory for saving checkpoint models')
 parser.add_argument('--weight_name', default='None_',
@@ -87,18 +85,34 @@ parser.add_argument('--saved_conf_loc', default=False, type=str2bool,
                     help='Use saved whole matching')
 parser.add_argument('--relative_multi', default=False, type=float,
                     help='Change multi matching to relative')
+parser.add_argument('--seed', default=None, type=int,
+                    help='Seed value for initialization')
 args = parser.parse_args()
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
 # For reproducible output (Added after 22.07.08 01:33:04 KST)
-random.seed(3407)
-np.random.seed(3407)
-os.environ['PYTHONHASHSEED'] = '3407'
-torch.manual_seed(3407)
-torch.cuda.manual_seed(3407)
-torch.cuda.manual_seed_all(3407)
+if args.seed is None:
+    if args.dataset == 'TT100K':
+        SEED = 3407
+    elif args.dataset == 'VOC':
+        SEED = 3763722138
+    elif args.dataset == 'COCO':
+        SEED = 3763722138
+    else:
+        raise Exception(f'Seed not provided for {args.dataset} dataset.')
+else:
+    SEED = args.seed
+
+random.seed(SEED)
+np.random.seed(SEED)
+os.environ['PYTHONHASHSEED'] = str(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+g = torch.Generator(device='cuda')
+g.manual_seed(SEED)
 torch.use_deterministic_algorithms(True)
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
@@ -107,8 +121,6 @@ def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
-g = torch.Generator(device='cuda')
-g.manual_seed(3407)
 
 print('Number of available GPUs:', torch.cuda.device_count())
 print('Current cuda device:', torch.cuda.current_device())
@@ -163,11 +175,6 @@ def train():
         if args.dataset == 'COCO':
             assert COCO_NETWORK_SIZE == args.ensure_archi
 
-    if args.visdom:
-        import visdom
-        global viz
-        viz = visdom.Visdom()
-
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'], args.dataset)
     # summary(ssd_net, input_size=(args.batch_size, 3, cfg['min_dim'], cfg['min_dim']), device='cuda')
     net = ssd_net
@@ -206,29 +213,26 @@ def train():
     net.train()
 
     # loss counters
-    loc_loss = 0
-    conf_loss = 0
-    epoch = 0
     print('Loading the dataset...')
 
-    epoch_size = len(dataset) // args.batch_size
+    epoch_size = float(len(dataset)) / args.batch_size
+    warm_up_target = np.ceil(5 * epoch_size)
     print('Training SSD on:', dataset.name)
     print('Using the specified args:')
     print(args)
 
     step_index = 0
 
+    # lr warming up
+    lr_warm_up_timer = 0
+    if args.dataset == 'VOC':
+        lr_warm_up_timer = warm_up_target - args.start_iter + 1
+        print(f'Learning rate warming up until iteration {warm_up_target}')
+
     # adjust lr on resuming training
+    lr_adjusted = True
     if args.start_iter != 1:
         lr_adjusted = False
-    else:
-        lr_adjusted = True
-
-    if args.visdom:
-        vis_title = 'SSD.PyTorch on ' + dataset.name
-        vis_legend = ['Loc Loss', 'Conf Loss', 'Total Loss']
-        iter_plot = create_vis_plot('Iteration', 'Loss', vis_title, vis_legend)
-        epoch_plot = create_vis_plot('Epoch', 'Loss', vis_title, vis_legend)
 
     data_loader = data.DataLoader(dataset, args.batch_size,
                                   num_workers=args.num_workers,
@@ -237,26 +241,22 @@ def train():
     # create batch iterator
     batch_iterator = iter(data_loader)
     for iteration in range(args.start_iter, cfg['max_iter'] + 1):
-        if args.visdom and iteration != 0 and (iteration % epoch_size == 0):
-            update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
-                            'append', epoch_size)
-            # reset epoch loss counters
-            loc_loss = 0
-            conf_loss = 0
-            epoch += 1
-
         # adjust lr on resuming training
         if not lr_adjusted:
             for i, lr_step in enumerate(reversed(cfg['lr_steps'])):
                 if iteration > lr_step:
                     step_index = len(cfg['lr_steps']) - i
-                    adjust_learning_rate(optimizer, args.gamma, step_index)
+                    set_learning_rate_decay(optimizer, args.gamma, step_index)
                     lr_adjusted = True
                     break
+        # lr warming up
+        if lr_warm_up_timer != 0:
+            set_learning_rate(optimizer, args.lr * (iteration / warm_up_target))
+            lr_warm_up_timer -= 1
 
         if iteration - 1 in cfg['lr_steps']:
             step_index += 1
-            adjust_learning_rate(optimizer, args.gamma, step_index)
+            set_learning_rate_decay(optimizer, args.gamma, step_index)
 
         # load train data
         try:
@@ -273,11 +273,13 @@ def train():
             images = Variable(images)
             with torch.no_grad():
                 targets = [Variable(ann) for ann in targets]
+
         # forward
         t0 = time.time()
         out = net(images)
         if args.time_verbose:
             t_1 = time.time()
+
         # backprop
         optimizer.zero_grad()
         loss_l, loss_c = criterion(out, targets)
@@ -289,8 +291,6 @@ def train():
             t_3 = time.time()
         optimizer.step()
         t1 = time.time()
-        loc_loss += loss_l.data
-        conf_loss += loss_c.data
 
         if iteration % 1 == 0:
             if args.time_verbose:
@@ -298,11 +298,9 @@ def train():
                       ' loss calc: %.4f sec.' % (t_2 - t_1) + ' backward: %.4f sec.' % (t_3 - t_2) +
                       ' weight update: %.4f sec.' % (t1 - t_3))
             else:
-                print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % loss.data + ' timer: %.4f sec.' % (t1 - t0))
-
-        if args.visdom:
-            update_vis_plot(iteration, loss_l.data, loss_c.data,
-                            iter_plot, epoch_plot, 'append')
+                print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % loss.data + ' time: %.4f sec.' % (t1 - t0))
+            if loss.data > 100000:
+                raise Exception(f'seed {SEED} is not promising. try another.')
 
         if iteration != 0 and iteration % 10000 == 0:
             print('Saving state, iter:', iteration)
@@ -320,7 +318,7 @@ def train():
     send_train_finished(args.ensure_archi, args.matching_strategy, args.ensure_size, args.augmentation, args.dataset)
 
 
-def adjust_learning_rate(optimizer, gamma, step):
+def set_learning_rate_decay(optimizer, gamma, step):
     """Sets the learning rate to the initial LR decayed by 10 at every
         specified step
     # Adapted from PyTorch Imagenet example:
@@ -328,6 +326,11 @@ def adjust_learning_rate(optimizer, gamma, step):
     """
     lr = args.lr * (gamma ** (step))
     print(f'adjusting learning rate to {lr}')
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
+
+def set_learning_rate(optimizer, lr):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
@@ -340,37 +343,6 @@ def weights_init(m):
     if isinstance(m, nn.Conv2d):
         xavier(m.weight.data)
         m.bias.data.zero_()
-
-
-def create_vis_plot(_xlabel, _ylabel, _title, _legend):
-    return viz.line(
-        X=torch.zeros((1,)).cpu(),
-        Y=torch.zeros((1, 3)).cpu(),
-        opts=dict(
-            xlabel=_xlabel,
-            ylabel=_ylabel,
-            title=_title,
-            legend=_legend
-        )
-    )
-
-
-def update_vis_plot(iteration, loc, conf, window1, window2, update_type,
-                    epoch_size=1):
-    viz.line(
-        X=torch.ones((1, 3)).cpu() * iteration,
-        Y=torch.Tensor([loc, conf, loc + conf]).unsqueeze(0).cpu() / epoch_size,
-        win=window1,
-        update=update_type
-    )
-    # initialize epoch plot on first iteration
-    if iteration == 0:
-        viz.line(
-            X=torch.zeros((1, 3)).cpu(),
-            Y=torch.Tensor([loc, conf, loc + conf]).unsqueeze(0).cpu(),
-            win=window2,
-            update=True
-        )
 
 
 if __name__ == '__main__':
