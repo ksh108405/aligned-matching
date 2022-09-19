@@ -41,8 +41,8 @@ parser = argparse.ArgumentParser(
 parser.add_argument('--trained_model',
                     default='weights/ssd300_mAP_77.43_v2.pth', type=str,
                     help='Trained state_dict file path to open')
-parser.add_argument('--save_folder', default='eval/', type=str,
-                    help='File path to save results')
+parser.add_argument('--result_dir', default='results/', type=str,
+                    help='File path to save mAP and AP of the model')
 parser.add_argument('--confidence_threshold', default=0.01, type=float,
                     help='Detection confidence threshold')
 parser.add_argument('--top_k', default=5, type=int,
@@ -64,19 +64,18 @@ args = parser.parse_args()
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
-random.seed(3407)
-np.random.seed(3407)
-os.environ['PYTHONHASHSEED'] = '3407'
-torch.manual_seed(3407)
-torch.cuda.manual_seed(3407)
-torch.cuda.manual_seed_all(3407)
+seed = 3407
+
+random.seed(seed)
+np.random.seed(seed)
+os.environ['PYTHONHASHSEED'] = str(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed(seed)
+torch.cuda.manual_seed_all(seed)
 torch.use_deterministic_algorithms(True)
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
 # torch.backends.cudnn.enabled = False
-
-if not os.path.exists(args.save_folder):
-    os.mkdir(args.save_folder)
 
 if torch.cuda.is_available():
     if args.cuda:
@@ -200,15 +199,20 @@ def do_python_eval(output_dir='output', use_07=True):
     print('VOC07 metric? ' + ('Yes' if use_07_metric else 'No'))
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
-    for i, cls in enumerate(labelmap):
-        filename = get_voc_results_file_template(set_type, cls)
-        rec, prec, ap = voc_eval(
-           filename, annopath, imgsetpath.format(set_type), cls, cachedir,
-           ovthresh=0.5, use_07_metric=use_07_metric)
-        aps += [ap]
-        print('AP for {} = {:.4f}'.format(cls, ap))
-        with open(os.path.join(dataset_path, 'detection_caches', cls + '_pr.pkl'), 'wb') as f:
-            pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
+    if not os.path.isdir(args.result_dir):
+        os.mkdir(args.result_dir)
+    with open(f'{args.result_dir}{args.trained_model.split("/")[-1][:-4]}.txt', 'w') as f_txt:
+        for i, cls in enumerate(labelmap):
+            filename = get_voc_results_file_template(set_type, cls)
+            rec, prec, ap = voc_eval(
+               filename, annopath, imgsetpath.format(set_type), cls, cachedir,
+               ovthresh=0.5, use_07_metric=use_07_metric)
+            aps += [ap]
+            print('AP for {} = {:.4f}'.format(cls, ap))
+            f_txt.write(f'AP for {cls} = {ap:.4f}\n')
+            with open(os.path.join(dataset_path, 'detection_caches', cls + '_pr.pkl'), 'wb') as f:
+                pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
+        f_txt.write('Mean AP = {:.4f}'.format(np.mean(aps)))
     print('Mean AP = {:.4f}'.format(np.mean(aps)))
     print('~~~~~~~~')
     print('Results:')
@@ -393,7 +397,7 @@ cachedir: Directory for caching the annotations
     return rec, prec, ap
 
 
-def test_net(save_folder, net, cuda, dataset, transform, top_k,
+def test_net(net, cuda, dataset, transform, top_k,
              im_size=300, thresh=0.05):
     num_images = len(dataset)
     # all detections are collected into:
@@ -490,6 +494,6 @@ if __name__ == '__main__':
     if args.cuda:
         net = net.cuda()
     # evaluation
-    test_net(args.save_folder, net, args.cuda, dataset,
+    test_net(net, args.cuda, dataset,
              BaseTransform(net.size, dataset_mean), args.top_k, 300,
              thresh=args.confidence_threshold)

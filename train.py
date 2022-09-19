@@ -15,7 +15,7 @@ import torch.utils.data as data
 import numpy as np
 import argparse
 import random
-from telegram_alerter import send_train_finished
+from telegram_alerter import send_train_finished, send_train_error
 from torchinfo import summary
 
 
@@ -300,6 +300,7 @@ def train():
             else:
                 print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % loss.data + ' time: %.4f sec.' % (t1 - t0))
             if loss.data > 100000:
+                send_train_error()
                 raise Exception(f'seed {SEED} is not promising. try another.')
 
         if iteration != 0 and iteration % 10000 == 0:

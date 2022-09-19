@@ -131,3 +131,10 @@ data/ssd_dataloader.py
 /vgg16_reducedfc.pth
 /telegram_alerter.py
 /.run/
+/results/
+/0.10_eval.sh
+/0.07_eval.sh
+/0.04_eval.sh
+/0.01_eval_tt100k.sh
+/0.01_eval.sh
+/eval_all.sh
