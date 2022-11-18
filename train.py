@@ -208,7 +208,7 @@ def train():
     criterion = MultiBoxLoss(cfg['num_classes'], args.multi_thresh, True, 0, True, 3, 0.5,
                              False, cfg, args.cuda, matching=args.matching_strategy, fix_loss=args.fix_loss,
                              multi_matching=args.multi_matching, saved_matching=args.saved_matching,
-                             saved_conf_loc=args.saved_conf_loc, relative_multi=args.relative_multi)
+                             saved_conf_loc=args.saved_conf_loc, relative_multi=args.relative_multi, etc=args)
 
     net.train()
 
