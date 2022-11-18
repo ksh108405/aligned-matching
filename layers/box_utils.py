@@ -384,6 +384,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     # End visualization code
 
     # Start center point distribution calc code
+    """
     obj_idx = 0
     aug_noaug = "aug" if etc_info.augmentation else "noaug"
     file_name = f'{etc_info.ensure_archi}_{etc_info.matching_strategy}_{etc_info.ensure_size}_' \
@@ -403,6 +404,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
             dist_xy = np.sqrt(np.power(dist_x, 2) + np.power(dist_y, 2))  # calculate euclidean distance
             f.write(f'{dist_x:0.8f} {dist_y:0.8f} {dist_xy:0.8f} {prior_ratio:0.4f} {truth_ratio:0.4f}\n')
             obj_idx += 1
+    """
     # End center point distribution calc code
 
     best_truth_idx.squeeze_(0)
