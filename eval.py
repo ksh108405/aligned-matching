@@ -208,17 +208,17 @@ def do_python_eval(output_dir='output', use_07=True):
                filename, annopath, imgsetpath.format(set_type), cls, cachedir,
                ovthresh=0.5, use_07_metric=use_07_metric)
             aps += [ap]
-            print('AP for {} = {:.4f}'.format(cls, ap))
-            f_txt.write(f'AP for {cls} = {ap:.4f}\n')
+            print('AP for {} = {:.5f}'.format(cls, ap))
+            f_txt.write(f'AP for {cls} = {ap:.5f}\n')
             with open(os.path.join(dataset_path, 'detection_caches', cls + '_pr.pkl'), 'wb') as f:
                 pickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
-        f_txt.write('Mean AP = {:.4f}'.format(np.mean(aps)))
-    print('Mean AP = {:.4f}'.format(np.mean(aps)))
+        f_txt.write('Mean AP = {:.5f}'.format(np.mean(aps)))
+    print('Mean AP = {:.5f}'.format(np.mean(aps)))
     print('~~~~~~~~')
     print('Results:')
     for ap in aps:
-        print('{:.4f}'.format(ap))
-    print('{:.4f}'.format(np.mean(aps)))
+        print('{:.5f}'.format(ap))
+    print('{:.5f}'.format(np.mean(aps)))
     print('~~~~~~~~')
     print('')
     print('--------------------------------------------------------------')
