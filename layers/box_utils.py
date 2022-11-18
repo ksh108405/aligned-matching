@@ -245,7 +245,7 @@ def aligned_matching_cuda(overlap, truths, threshold, cfg):
 
 
 def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matching, cfg, fix_loss=False,
-          multi_matching=True, use_saved=False, use_saved_conf_loc=False, relative_multi=False):
+          multi_matching=True, use_saved=False, use_saved_conf_loc=False, relative_multi=False, etc_info=None):
     """Match each prior box with the ground truth box of the highest jaccard
     overlap, encode the bounding boxes, then return the matched indices
     corresponding to both confidence and location preds.
@@ -321,7 +321,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
         t0 = time.time()
 
     # (Bipartite Matching)
-    # [1,num_objects] best prior for each ground truth
+    # [1,num_objects] the best prior for each ground truth
     if matching == 'legacy' or matching == 'resized':
         best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
     elif matching == 'aligned_cpu':
@@ -382,6 +382,30 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     # cv2.waitKey(2000)
     """
     # End visualization code
+
+    # Start center point distribution calc code
+    """
+    obj_idx = 0
+    file_name = f'{etc_info.ensure_archi}_{etc_info.matching_strategy}_{etc_info.ensure_size}_' \
+                f'{etc_info.augmentation}_{etc_info.dataset}_dist.txt'
+    with open(file_name, "a") as f:
+        for prior_box in point_form(priors)[best_prior_idx]:
+            prior_box = prior_box[0].cpu().numpy()
+            truth_box = truths[obj_idx].cpu().numpy()
+            prior_cx = (prior_box[0] + prior_box[2]) / 2.
+            prior_cy = (prior_box[1] + prior_box[3]) / 2.
+            truth_cx = (truth_box[0] + truth_box[2]) / 2.
+            truth_cy = (truth_box[1] + truth_box[3]) / 2.
+            prior_ratio = (prior_box[2] - prior_box[0]) / (prior_box[3] - prior_box[1])
+            truth_ratio = (truth_box[2] - truth_box[0]) / (truth_box[3] - truth_box[1])
+            dist_x = prior_cx - truth_cx  # calculate distance on ground truth
+            dist_y = prior_cy - truth_cy
+            dist_xy = np.sqrt(np.power(dist_x, 2) + np.power(dist_y, 2))  # calculate euclidean distance
+            f.write(f'{dist_x:0.8f} {dist_y:0.8f} {dist_xy:0.8f} {prior_ratio:0.4f} {truth_ratio:0.4f}\n')
+            obj_idx += 1
+    """
+    # End center point distribution calc code
+
     best_truth_idx.squeeze_(0)
     best_truth_overlap.squeeze_(0)
     best_prior_idx.squeeze_(1)
