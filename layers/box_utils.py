@@ -367,8 +367,10 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
         # print(int(obj_idx))
         # print(f"algorithm result : {get_anchor_box_size(int(best_prior_idx[obj_idx]), cfg['feature_maps'], cfg['aspect_ratios'])}")
         obj_idx += 1
-        # print((prior_idx[0] * 1000, prior_idx[1] * 1000))
-        # print((prior_idx[2] * 1000, prior_idx[3] * 1000))
+        # print((prior_idx[0] * 1000, prior_idx[1] * 1000))  # (x1, y1)
+        # print((prior_idx[2] * 1000, prior_idx[3] * 1000))  # (x2, y2)
+        # print((prior_idx[2] * 1000 - prior_idx[0] * 1000))  # (w)
+        # print((prior_idx[3] * 1000 - prior_idx[1] * 1000))  # (h)
         img = cv2.rectangle(img, (int(prior_idx[0] * 1000), int(prior_idx[1] * 1000)),
                             (int(prior_idx[2] * 1000), int(prior_idx[3] * 1000)), (0, 0, 255), 3)
     # print('truth =')
@@ -379,7 +381,6 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
         # print(f'height = {truth[3] * 1000 - truth[1] * 1000}')
         img = cv2.rectangle(img, (int(truth[0] * 1000), int(truth[1] * 1000)),
                             (int(truth[2] * 1000), int(truth[3] * 1000)), (0, 255, 0), 3)
-
     cv2.imwrite(
         f'./matching_output/aligned3_0.10/{int(truth[0] * 1000)},{int(truth[1] * 1000)},'
         f'{int(truth[2] * 1000)},{int(truth[3] * 1000)}.png', img)  # 이미지 저장
