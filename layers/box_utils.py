@@ -127,7 +127,8 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
             ratio_list = [1, -100, 2, 0.5, 3, 1 / 3]
             gt_ratios = np.abs(np.array(ratio_list) - truth_ratio).argmin()
         for i, prior_id in enumerate(prior_idx_cpu):
-            prior_ratio = get_anchor_box_size(prior_id, cfg['feature_maps'], cfg['aspect_ratios'])
+            prior_ratio = get_anchor_box_size(prior_id, cfg['feature_maps'], cfg['aspect_ratios'],
+                                              1 if cfg['max_sizes'] is None else 2)
             if fix_ratio:
                 if prior_ratio == 1:  # append big 1:1 default box.
                     prior_ratio = 0
@@ -135,14 +136,16 @@ def aligned_matching(overlap, truths, threshold, cfg, fix_ratio=False, fix_ignor
                 allowed_priors.append(i)
             else:
                 # get types of default box ratio of each feature map.
-                anchor_size_list, accumulated_slice_list = get_anchor_nums(cfg['feature_maps'], cfg['aspect_ratios'])
+                anchor_size_list, accumulated_slice_list = get_anchor_nums(cfg['feature_maps'], cfg['aspect_ratios'],
+                                                                           1 if cfg['max_sizes'] is None else 2)
                 for j, accumulated_slice in enumerate(accumulated_slice_list):
                     if prior_id < accumulated_slice:
                         break
                 # if ratio is out of range (ex. feature map with no 1:3, 3:1 default box)
                 if (anchor_size_list[j] - 1) < gt_ratios:
                     # match 2:1 default box with 3:1 ground truth and so on...
-                    if get_anchor_box_size(prior_id, cfg['feature_maps'], cfg['aspect_ratios']) % 2 == gt_ratios % 2:
+                    if get_anchor_box_size(prior_id, cfg['feature_maps'], cfg['aspect_ratios'],
+                                           1 if cfg['max_sizes'] is None else 2) % 2 == gt_ratios % 2:
                         allowed_priors.append(i)
 
         if allowed_priors:
@@ -191,7 +194,8 @@ def aligned_matching_cuda(overlap, truths, threshold, cfg):
     gt_ratios = torch.argmin(torch.abs(ratio_list - truth_ratio), dim=1)
 
     if prior_to_ratio is None:
-        anchor_size_list, accumulated_slice_list = get_anchor_nums(cfg['feature_maps'], cfg['aspect_ratios'])
+        anchor_size_list, accumulated_slice_list = get_anchor_nums(cfg['feature_maps'], cfg['aspect_ratios'],
+                                                                   1 if cfg['max_sizes'] is None else 2)
         prior_to_ratio = []
         layer_num = 0
         for i in range(accumulated_slice_list[-1]):
@@ -315,7 +319,8 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
             prior_sizes = center_size(priors).cpu().numpy()
         prior_info = []
         for i in range(len(priors)):
-            prior_info.append(get_anchor_box_size(i, cfg['feature_maps'], cfg['aspect_ratios']))
+            prior_info.append(get_anchor_box_size(i, cfg['feature_maps'], cfg['aspect_ratios'],
+                                                  1 if cfg['max_sizes'] is None else 2))
 
     if MATCHING_TIMER:
         t0 = time.time()
@@ -389,7 +394,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx, matc
     aug_noaug = "aug" if etc_info.augmentation else "noaug"
     file_name = f'{etc_info.ensure_archi}_{etc_info.matching_strategy}_{etc_info.ensure_size}_' \
                 f'{aug_noaug}_{etc_info.dataset}_dist.txt'
-    with open(file_name, "a") as f:
+    with open('./distribution_results/' + file_name, "a") as f:
         for prior_box in point_form(priors)[best_prior_idx]:
             prior_box = prior_box[0].cpu().numpy()
             truth_box = truths[obj_idx].cpu().numpy()

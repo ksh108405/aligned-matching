@@ -186,16 +186,24 @@ def multibox(vgg, extra_layers, cfg, num_classes):
 
 
 base = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M', 512, 512, 512]
+
 extras = {
     '300': [256, 'S', 512, 128, 'S', 256, 128, 256, 128, 256],
     '512': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128, 'S', 256, 128, 'F', 256],
     '1024': [256, 'S', 512, 128, 'S', 256, 128, 'S', 256, 128, 'S', 256, 128, 'S', 256, 128, 'F', 256]
 }
+
 mbox = {
     '300': [4, 6, 6, 6, 4, 4],  # number of boxes per feature map location
     '512': [4, 6, 6, 6, 6, 4, 4],
     # '512': [5, 7, 7, 7, 7, 5, 5]  # If and only if 'half_sized' = True
     '1024': [4, 6, 6, 6, 6, 6, 4, 4]
+}
+
+mbox_1a = {
+    '300': [1, 1, 1, 1, 1, 1],  # number of boxes per feature map location
+    '512': [1, 1, 1, 1, 1, 1, 1],
+    '1024': [1, 1, 1, 1, 1, 1, 1, 1]
 }
 
 
@@ -216,7 +224,9 @@ def build_ssd(phase, size=512, num_classes=21, cfg=None):
         raise Exception("ERROR: You specified config " + str(cfg) + ". However, " +
                         "currently Pascal VOC, COCO and TT100K are supported!")
 
-    if cfg['half_sized']:
+    if cfg['max_sizes'] is None:
+        model_mbox = mbox_1a[str(size)]
+    elif cfg['half_sized']:
         model_mbox = [i+1 for i in mbox[str(size)]]
     else:
         model_mbox = mbox[str(size)]

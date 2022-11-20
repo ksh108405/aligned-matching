@@ -35,26 +35,30 @@ class PriorBox(object):
                 cx = (j + 0.5) / f_k
                 cy = (i + 0.5) / f_k
 
-                # aspect_ratio: 1
-                # rel size: min_size
-                s_k = self.min_sizes[k]/self.image_size
-                mean += [cx, cy, s_k, s_k]
-
-                # aspect_ratio: 1
-                # rel size: sqrt(s_k * s_(k+1))
-                s_k_prime = sqrt(s_k * (self.max_sizes[k]/self.image_size))
-                mean += [cx, cy, s_k_prime, s_k_prime]
-
-                if self.half_sized:
+                if self.max_sizes is not None:
                     # aspect_ratio: 1
-                    # rel size: 0.5 * min_size
-                    s_k_2prime = 0.5 * self.min_sizes[k]/self.image_size
-                    mean += [cx, cy, s_k_2prime, s_k_2prime]
+                    # rel size: min_size
+                    s_k = self.min_sizes[k]/self.image_size
+                    mean += [cx, cy, s_k, s_k]
 
-                # rest of aspect ratios
-                for ar in self.aspect_ratios[k]:
-                    mean += [cx, cy, s_k*sqrt(ar), s_k/sqrt(ar)]
-                    mean += [cx, cy, s_k/sqrt(ar), s_k*sqrt(ar)]
+                    # aspect_ratio: 1
+                    # rel size: sqrt(s_k * s_(k+1))
+                    s_k_prime = sqrt(s_k * (self.max_sizes[k]/self.image_size))
+                    mean += [cx, cy, s_k_prime, s_k_prime]
+
+                    if self.half_sized:
+                        # aspect_ratio: 1
+                        # rel size: 0.5 * min_size
+                        s_k_2prime = 0.5 * self.min_sizes[k]/self.image_size
+                        mean += [cx, cy, s_k_2prime, s_k_2prime]
+
+                    # rest of aspect ratios
+                    for ar in self.aspect_ratios[k]:
+                        mean += [cx, cy, s_k*sqrt(ar), s_k/sqrt(ar)]
+                        mean += [cx, cy, s_k/sqrt(ar), s_k*sqrt(ar)]
+                else:
+                    s_kw, s_kh = self.min_sizes[k][0], self.min_sizes[k][1]
+                    mean += [cx, cy, s_kw, s_kh]
         # back to torch land
         output = torch.Tensor(mean).view(-1, 4)
         if self.clip:

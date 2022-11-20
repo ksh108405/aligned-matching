@@ -12,7 +12,7 @@ def get_anchor_nums(feature_map, anchor_box, square_anchor_num=2):
 
     if not accumulated_slice_list:
         before = 0
-        # square_anchor_num은 정사각형 앵커박스 개수 (0 or 1 or 2)
+        # square_anchor_num은 정사각형 앵커박스 개수 (0 or 1 or 2 or ...)
         for feature, anchor in zip(feature_map, anchor_box):
             # print(f'f : {feature}, a : {anchor}')
             # anchor_size = 1:1, big 1:1, 2:1, 1:2, 1:3, 3:1 등등 앵커박스 총 갯수

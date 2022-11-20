@@ -1,6 +1,6 @@
 # config.py
 import os.path
-from .config_util import get_min_max_size, size_index, conv4_3_size
+from .config_util import get_min_max_size, get_kmeans_size, size_index, conv4_3_size
 
 # gets home dir cross platform
 HOME = os.path.expanduser("~")
@@ -30,11 +30,37 @@ else:
     TT100K_CONV4_3_SIZE = float(os.getenv('SSD_CONV4_3_SIZE'))
     COCO_CONV4_3_SIZE = float(os.getenv('SSD_CONV4_3_SIZE'))
 
-VOC_MIN_MAX_SIZE = get_min_max_size(VOC_NETWORK_SIZE, conv4_3_size[str(VOC_CONV4_3_SIZE)])
+if os.getenv('SSD_USE_KMEANS') is None:
+    VOC_MIN_MAX_SIZE = get_min_max_size(VOC_NETWORK_SIZE, conv4_3_size[str(VOC_CONV4_3_SIZE)])
+    TT100K_MIN_MAX_SIZE = get_min_max_size(TT100K_NETWORK_SIZE, conv4_3_size[str(TT100K_CONV4_3_SIZE)])
+    COCO_MIN_MAX_SIZE = get_min_max_size(COCO_NETWORK_SIZE, conv4_3_size[str(COCO_CONV4_3_SIZE)])
+    VOC_ASPECT_RATIOS = [[[2], [2, 3], [2, 3], [2, 3], [2], [2]],
+                         [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2], [2]],
+                         [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]][size_index[str(VOC_NETWORK_SIZE)]]
+    TT100K_ASPECT_RATIOS = [[[2], [2, 3], [2, 3], [2, 3], [2], [2]],
+                            [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2], [2]],
+                            [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]][size_index[str(TT100K_NETWORK_SIZE)]]
+    COCO_ASPECT_RATIOS = [[[2], [2, 3], [2, 3], [2, 3], [2], [2]],
+                          [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2], [2]],
+                          [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]][size_index[str(COCO_NETWORK_SIZE)]]
+else:
+    VOC_MIN_MAX_SIZE = get_min_max_size(VOC_NETWORK_SIZE, conv4_3_size[str(VOC_CONV4_3_SIZE)])
+    # [get_kmeans_size(VOC_NETWORK_SIZE, 'VOC'), None]
+    TT100K_MIN_MAX_SIZE = [get_kmeans_size(VOC_NETWORK_SIZE, 'TT100K'), None]
+    COCO_MIN_MAX_SIZE = get_min_max_size(COCO_NETWORK_SIZE, conv4_3_size[str(COCO_CONV4_3_SIZE)])
+    # [get_kmeans_size(VOC_NETWORK_SIZE, 'COCO'), None]
+    VOC_ASPECT_RATIOS = [[[], [], [], [], [], []],
+                         [[], [], [], [], [], [], []],
+                         [[], [], [], [], [], [], [], []]][size_index[str(VOC_NETWORK_SIZE)]]
+    TT100K_ASPECT_RATIOS = [[[], [], [], [], [], []],
+                            [[], [], [], [], [], [], []],
+                            [[], [], [], [], [], [], [], []]][size_index[str(TT100K_NETWORK_SIZE)]]
+    COCO_ASPECT_RATIOS = [[[], [], [], [], [], []],
+                          [[], [], [], [], [], [], []],
+                          [[], [], [], [], [], [], [], []]][size_index[str(COCO_NETWORK_SIZE)]]
+
 VOC_HALF_SIZED = False
-TT100K_MIN_MAX_SIZE = get_min_max_size(TT100K_NETWORK_SIZE, conv4_3_size[str(TT100K_CONV4_3_SIZE)])
 TT100K_HALF_SIZED = False
-COCO_MIN_MAX_SIZE = get_min_max_size(COCO_NETWORK_SIZE, conv4_3_size[str(COCO_CONV4_3_SIZE)])
 COCO_HALF_SIZED = False
 
 voc = {
@@ -48,8 +74,7 @@ voc = {
         size_index[str(VOC_NETWORK_SIZE)]],
     'min_sizes': VOC_MIN_MAX_SIZE[0],
     'max_sizes': VOC_MIN_MAX_SIZE[1],
-    'aspect_ratios': [[[2], [2, 3], [2, 3], [2, 3], [2], [2]], [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2], [2]],
-                      [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]][size_index[str(VOC_NETWORK_SIZE)]],
+    'aspect_ratios': VOC_ASPECT_RATIOS,
     'half_sized': VOC_HALF_SIZED,
     'variance': [0.1, 0.2],
     'clip': True,
@@ -67,8 +92,7 @@ tt100k = {
         size_index[str(TT100K_NETWORK_SIZE)]],
     'min_sizes': TT100K_MIN_MAX_SIZE[0],
     'max_sizes': TT100K_MIN_MAX_SIZE[1],
-    'aspect_ratios': [[[2], [2, 3], [2, 3], [2, 3], [2], [2]], [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2], [2]],
-                      [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]][size_index[str(TT100K_NETWORK_SIZE)]],
+    'aspect_ratios': TT100K_ASPECT_RATIOS,
     'half_sized': TT100K_HALF_SIZED,
     'variance': [0.1, 0.2],
     'clip': True,
@@ -86,8 +110,7 @@ coco = {
         size_index[str(COCO_NETWORK_SIZE)]],
     'min_sizes': COCO_MIN_MAX_SIZE[0],
     'max_sizes': COCO_MIN_MAX_SIZE[1],
-    'aspect_ratios': [[[2], [2, 3], [2, 3], [2, 3], [2], [2]], [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2], [2]],
-                      [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]][size_index[str(COCO_NETWORK_SIZE)]],
+    'aspect_ratios': COCO_ASPECT_RATIOS,
     'half_sized': COCO_HALF_SIZED,
     'variance': [0.1, 0.2],
     'clip': True,

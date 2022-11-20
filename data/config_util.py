@@ -1,4 +1,5 @@
 import math
+import numpy as np
 
 
 def get_min_max_size(network_size, scale_list):
@@ -13,6 +14,42 @@ def get_min_max_size(network_size, scale_list):
     min_sizes = [round(x * network_size, 2) for x in scales[:-1]]
     max_sizes = [round(x * network_size, 2) for x in scales[1:]]
     return [min_sizes, max_sizes]
+
+
+def get_kmeans_size(network_size, dataset):
+    if dataset == 'TT100K':
+        if network_size == 300:
+            size_array = [[0.0091, 0.0103],
+                          [0.0155, 0.0180],
+                          [0.0246, 0.0277],
+                          [0.0340, 0.0413],
+                          [0.0498, 0.0589],
+                          [0.0800, 0.0882]]
+        elif network_size == 512:
+            size_array = [[0.0090, 0.0102],
+                          [0.0152, 0.0177],
+                          [0.0238, 0.0269],
+                          [0.0349, 0.0388],
+                          [0.0279, 0.0594],
+                          [0.0539, 0.0568],
+                          [0.0799, 0.0904]]
+        elif network_size == 1024:
+            size_array = [[0.0083, 0.0094],
+                          [0.0130, 0.0148],
+                          [0.0190, 0.0220],
+                          [0.0277, 0.0312],
+                          [0.0268, 0.0592],
+                          [0.0392, 0.0429],
+                          [0.0561, 0.0595],
+                          [0.0805, 0.0907]]
+        else:
+            raise NotImplementedError
+    elif dataset == 'VOC':
+        raise NotImplementedError
+    else:
+        raise NotImplementedError
+
+    return size_array
 
 
 size_index = {'300': 0, '512': 1, '1024': 2}

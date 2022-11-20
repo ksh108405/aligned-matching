@@ -138,3 +138,4 @@ data/ssd_dataloader.py
 /0.01_eval_tt100k.sh
 /0.01_eval.sh
 /eval_all.sh
+/distribution_results/
