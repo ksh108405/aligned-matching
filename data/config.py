@@ -44,9 +44,8 @@ if os.getenv('SSD_USE_KMEANS') is None:
                           [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2], [2]],
                           [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2, 3], [2], [2]]][size_index[str(COCO_NETWORK_SIZE)]]
 else:
-    VOC_MIN_MAX_SIZE = get_min_max_size(VOC_NETWORK_SIZE, conv4_3_size[str(VOC_CONV4_3_SIZE)])
-    # [get_kmeans_size(VOC_NETWORK_SIZE, 'VOC'), None]
-    TT100K_MIN_MAX_SIZE = [get_kmeans_size(VOC_NETWORK_SIZE, 'TT100K'), None]
+    VOC_MIN_MAX_SIZE = [get_kmeans_size(VOC_NETWORK_SIZE, 'VOC'), None]
+    TT100K_MIN_MAX_SIZE = [get_kmeans_size(TT100K_NETWORK_SIZE, 'TT100K'), None]
     COCO_MIN_MAX_SIZE = get_min_max_size(COCO_NETWORK_SIZE, conv4_3_size[str(COCO_CONV4_3_SIZE)])
     # [get_kmeans_size(VOC_NETWORK_SIZE, 'COCO'), None]
     VOC_ASPECT_RATIOS = [[[], [], [], [], [], []],

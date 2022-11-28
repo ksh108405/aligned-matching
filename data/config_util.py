@@ -45,7 +45,32 @@ def get_kmeans_size(network_size, dataset):
         else:
             raise NotImplementedError
     elif dataset == 'VOC':
-        raise NotImplementedError
+        if network_size == 300:
+            size_array = [[0.0847, 0.1232],
+                          [0.2199, 0.3035],
+                          [0.2764, 0.5609],
+                          [0.7150, 0.4492],
+                          [0.4588, 0.8204],
+                          [0.8752, 0.8555]]
+        elif network_size == 512:
+            size_array = [[0.0863, 0.1187],
+                          [0.1865, 0.3098],
+                          [0.2474, 0.6007],
+                          [0.4809, 0.3937],
+                          [0.4807, 0.8193],
+                          [0.8378, 0.5094],
+                          [0.8771, 0.8854]]
+        elif network_size == 1024:
+            size_array = [[0.0774, 0.1095],
+                          [0.1802, 0.2622],
+                          [0.2133, 0.4876],
+                          [0.4853, 0.4016],
+                          [0.3196, 0.7508],
+                          [0.8518, 0.4970],
+                          [0.5956, 0.8195],
+                          [0.9063, 0.8890]]
+        else:
+            raise NotImplementedError
     else:
         raise NotImplementedError
 
