@@ -9,10 +9,11 @@ import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
-from data import VOC_ROOT, VOCAnnotationTransform, VOCDetection, VOC_CLASSES
-from data import TT100K_ROOT, TT100KAnnotationTransform, TT100KDetection, TT100K_CLASSES
+from data import VOC_ROOT, VOCAnnotationTransform, VOCDetection, VOC_CLASSES, VOC_NETWORK_SIZE, VOC_CONV4_3_SIZE
+from data import TT100K_ROOT, TT100KAnnotationTransform, TT100KDetection, TT100K_CLASSES, TT100K_NETWORK_SIZE, TT100K_CONV4_3_SIZE
 from data import BaseTransform
 import torch.utils.data as data
+from telegram_alerter import send_eval_finished
 
 from ssd import build_ssd
 
@@ -51,7 +52,7 @@ parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use cuda to train model')
 parser.add_argument('--gpu_id', default='0', type=str,
                     help='ID of GPU to use during evaluation')
-parser.add_argument('--dataset', default=VOC_ROOT,
+parser.add_argument('--dataset', default='VOC',
                     help='Name of dataset to evaluate')
 parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
@@ -225,6 +226,7 @@ def do_python_eval(output_dir='output', use_07=True):
     print('Results computed with the **unofficial** Python eval code.')
     print('Results should be very close to the official MATLAB eval code.')
     print('--------------------------------------------------------------')
+    send_eval_finished(weight_info[0], weight_info[1], weight_info[2], weight_info[3], weight_info[4], aps)
 
 
 def voc_ap(rec, prec, use_07_metric=True):
@@ -482,6 +484,21 @@ if __name__ == '__main__':
     net.load_state_dict(torch.load(args.trained_model))
     net.eval()
     print('Finished loading model!')
+
+    weight_info = args.trained_model.split('/')[-1].split('_')
+    if args.ensure_size is not None:
+        if weight_info[3] == 'kmeans':
+            assert os.getenv('SSD_USE_KMEANS') == "True"
+        elif args.dataset == 'VOC':
+            assert VOC_CONV4_3_SIZE == float(weight_info[3])
+        elif args.dataset == 'TT100K':
+            assert TT100K_CONV4_3_SIZE == float(weight_info[3])
+    if args.ensure_archi is not None:
+        if args.dataset == 'VOC':
+            assert VOC_NETWORK_SIZE == int(weight_info[0])
+        if args.dataset == 'TT100K':
+            assert TT100K_NETWORK_SIZE == int(weight_info[0])
+
     # load data
     if args.dataset == 'VOC':
         dataset = VOCDetection(dataset_root, [('2007', set_type)],
