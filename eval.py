@@ -486,18 +486,14 @@ if __name__ == '__main__':
     print('Finished loading model!')
 
     weight_info = args.trained_model.split('/')[-1].split('_')
-    if args.ensure_size is not None:
-        if weight_info[3] == 'kmeans':
-            assert os.getenv('SSD_USE_KMEANS') == "True"
-        elif args.dataset == 'VOC':
-            assert VOC_CONV4_3_SIZE == float(weight_info[3])
-        elif args.dataset == 'TT100K':
-            assert TT100K_CONV4_3_SIZE == float(weight_info[3])
-    if args.ensure_archi is not None:
-        if args.dataset == 'VOC':
-            assert VOC_NETWORK_SIZE == int(weight_info[0])
-        if args.dataset == 'TT100K':
-            assert TT100K_NETWORK_SIZE == int(weight_info[0])
+    if weight_info[3] == 'kmeans':
+        assert os.getenv('SSD_USE_KMEANS') == "True"
+    elif args.dataset == 'VOC':
+        assert VOC_CONV4_3_SIZE == float(weight_info[3])
+        assert VOC_NETWORK_SIZE == int(weight_info[0])
+    elif args.dataset == 'TT100K':
+        assert TT100K_CONV4_3_SIZE == float(weight_info[3])
+        assert TT100K_NETWORK_SIZE == int(weight_info[0])
 
     # load data
     if args.dataset == 'VOC':
