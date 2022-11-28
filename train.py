@@ -71,8 +71,8 @@ parser.add_argument('--one_epoch', default=False, type=str2bool,
                     help='Only iterate for one epoch')
 parser.add_argument('--fix_loss', default=False, type=str2bool,
                     help='Fix localization loss bugs')
-parser.add_argument('--ensure_size', default=None, type=float,
-                    help='Ensure conv4_3 default box size')
+parser.add_argument('--ensure_size', default=None, type=str,
+                    help='Ensure conv4_3 default box size or using K-Means')
 parser.add_argument('--ensure_archi', default=None, type=int,
                     help='Ensure SSD architecture')
 parser.add_argument('--multi_matching', default=True, type=str2bool,
@@ -160,12 +160,14 @@ def train():
         raise Exception('Select on VOC or TT100K or COCO.')
 
     if args.ensure_size is not None:
-        if args.dataset == 'VOC':
-            assert VOC_CONV4_3_SIZE == args.ensure_size
-        if args.dataset == 'TT100K':
-            assert TT100K_CONV4_3_SIZE == args.ensure_size
-        if args.dataset == 'COCO':
-            assert COCO_CONV4_3_SIZE == args.ensure_size
+        if args.ensure_size == 'kmeans':
+            assert os.getenv('SSD_USE_KMEANS') == "True"
+        elif args.dataset == 'VOC':
+            assert VOC_CONV4_3_SIZE == float(args.ensure_size)
+        elif args.dataset == 'TT100K':
+            assert TT100K_CONV4_3_SIZE == float(args.ensure_size)
+        elif args.dataset == 'COCO':
+            assert COCO_CONV4_3_SIZE == float(args.ensure_size)
 
     if args.ensure_archi is not None:
         if args.dataset == 'VOC':
@@ -316,7 +318,7 @@ def train():
     torch.save(ssd_net.state_dict(),
                args.save_folder + args.weight_name + '_full.pth')
 
-    send_train_finished(args.ensure_archi, args.matching_strategy, args.ensure_size, args.augmentation, args.dataset)
+    send_train_finished(args.ensure_archi, args.dataset, args.matching_strategy, args.ensure_size, args.augmentation)
 
 
 def set_learning_rate_decay(optimizer, gamma, step):
