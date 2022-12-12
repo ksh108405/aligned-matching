@@ -486,7 +486,7 @@ if __name__ == '__main__':
     print('Finished loading model!')
 
     weight_info = args.trained_model.split('/')[-1].split('_')
-    if weight_info[3] == 'kmeans':
+    if weight_info[3] == 'kmeans' or weight_info[3] == 'kmeansarea':
         assert os.getenv('SSD_USE_KMEANS') == "True"
     elif args.dataset == 'VOC':
         assert VOC_CONV4_3_SIZE == float(weight_info[3])

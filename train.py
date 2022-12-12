@@ -161,7 +161,7 @@ def train():
 
     if args.ensure_size is not None:
         if args.ensure_size == 'kmeans':
-            assert os.getenv('SSD_USE_KMEANS') == "True"
+            assert os.getenv('SSD_USE_KMEANS') is not None
         elif args.dataset == 'VOC':
             assert VOC_CONV4_3_SIZE == float(args.ensure_size)
         elif args.dataset == 'TT100K':
