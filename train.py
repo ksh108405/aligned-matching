@@ -26,7 +26,7 @@ def str2bool(v):
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
 train_set = parser.add_mutually_exclusive_group()
-parser.add_argument('--dataset', default='VOC', choices=['VOC', 'COCO', 'TT100K'],
+parser.add_argument('--dataset', default='VOC', choices=['VOC', 'COCO', 'TT100K', 'TT100K45'],
                     type=str, help='VOC or COCO or TT100K')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
                     help='Pretrained base model')
@@ -96,6 +96,8 @@ os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 if args.seed is None:
     if args.dataset == 'TT100K':
         SEED = 3407
+    elif args.dataset == 'TT100K45':
+        SEED = 3407
     elif args.dataset == 'VOC':
         SEED = 3763722138
     elif args.dataset == 'COCO':
@@ -152,6 +154,13 @@ def train():
             image_sets = 'train'
         dataset = TT100KDetection(root=TT100K_ROOT, image_sets=image_sets,
                                   transform=SSDAugmentation(cfg['min_dim'], MEANS, args.augmentation))
+    elif args.dataset == 'TT100K45':
+        cfg = tt100k45
+        image_sets = args.train_set
+        if args.train_set == 'trainval':
+            image_sets = 'train_45'
+        dataset = TT100K45Detection(root=TT100K45_ROOT, image_sets=image_sets,
+                                    transform=SSDAugmentation(cfg['min_dim'], MEANS, args.augmentation))
     elif args.dataset == 'COCO':
         cfg = coco
         dataset = COCODetection(root=COCO_ROOT,
@@ -164,7 +173,7 @@ def train():
             assert os.getenv('SSD_USE_KMEANS') is not None
         elif args.dataset == 'VOC':
             assert VOC_CONV4_3_SIZE == float(args.ensure_size)
-        elif args.dataset == 'TT100K':
+        elif args.dataset == 'TT100K' or args.dataset == 'TT100K45':
             assert TT100K_CONV4_3_SIZE == float(args.ensure_size)
         elif args.dataset == 'COCO':
             assert COCO_CONV4_3_SIZE == float(args.ensure_size)
@@ -172,7 +181,7 @@ def train():
     if args.ensure_archi is not None:
         if args.dataset == 'VOC':
             assert VOC_NETWORK_SIZE == args.ensure_archi
-        if args.dataset == 'TT100K':
+        if args.dataset == 'TT100K' or args.dataset == 'TT100K45':
             assert TT100K_NETWORK_SIZE == args.ensure_archi
         if args.dataset == 'COCO':
             assert COCO_NETWORK_SIZE == args.ensure_archi

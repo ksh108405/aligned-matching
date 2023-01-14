@@ -106,6 +106,24 @@ tt100k = {
     'name': 'TT100K'
 }
 
+tt100k45 = {
+    'num_classes': 46,
+    'lr_steps': (120000, 200000, 240000),
+    'max_iter': 240000,
+    'feature_maps': [[38, 19, 10, 5, 3, 1], [64, 32, 16, 8, 4, 2, 1], [128, 64, 32, 16, 8, 4, 2, 1]][
+        size_index[str(TT100K_NETWORK_SIZE)]],
+    'min_dim': [300, 512, 1024][size_index[str(TT100K_NETWORK_SIZE)]],
+    'steps': [[8, 16, 32, 64, 100, 300], [8, 16, 32, 64, 128, 256, 512], [8, 16, 32, 64, 128, 256, 512, 1024]][
+        size_index[str(TT100K_NETWORK_SIZE)]],
+    'min_sizes': TT100K_MIN_MAX_SIZE[0],
+    'max_sizes': TT100K_MIN_MAX_SIZE[1],
+    'aspect_ratios': TT100K_ASPECT_RATIOS,
+    'half_sized': TT100K_HALF_SIZED,
+    'variance': [0.1, 0.2],
+    'clip': True,
+    'name': 'TT100K'
+}
+
 coco = {
     'num_classes': 81,
     'lr_steps': (280000, 320000, 360000),

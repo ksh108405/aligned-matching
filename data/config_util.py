@@ -15,7 +15,7 @@ def get_min_max_size(network_size, scale_list):
     return [min_sizes, max_sizes]
 
 
-def get_kmeans_wh_size(network_size, dataset):
+def get_kmeans_area_size(network_size, dataset):
     if dataset == 'TT100K':
         if network_size == 300:
             min_sizes = [2.8770, 4.9052, 7.6334, 11.0236, 16.0039, 24.7998]
@@ -46,7 +46,7 @@ def get_kmeans_wh_size(network_size, dataset):
     return [min_sizes, max_sizes]
 
 
-def get_kmeans_area_size(network_size, dataset):
+def get_kmeans_wh_size(network_size, dataset):
     if dataset == 'TT100K':
         if network_size == 300:
             size_array = [[0.0091, 0.0103],

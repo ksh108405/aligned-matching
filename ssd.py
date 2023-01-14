@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from layers import *
-from data import voc, coco, tt100k
+from data import voc, coco, tt100k, tt100k45
 import os
 
 
@@ -218,6 +218,8 @@ def build_ssd(phase, size=512, num_classes=21, cfg=None):
         cfg = voc
     elif cfg == 'TT100K':
         cfg = tt100k
+    elif cfg == 'TT100K45':
+        cfg = tt100k45
     elif cfg == 'COCO':
         cfg = coco
     else:

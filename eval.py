@@ -11,6 +11,7 @@ import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 from data import VOC_ROOT, VOCAnnotationTransform, VOCDetection, VOC_CLASSES, VOC_NETWORK_SIZE, VOC_CONV4_3_SIZE
 from data import TT100K_ROOT, TT100KAnnotationTransform, TT100KDetection, TT100K_CLASSES, TT100K_NETWORK_SIZE, TT100K_CONV4_3_SIZE
+from data import TT100K45_ROOT, TT100K45AnnotationTransform, TT100K45Detection, TT100K45_CLASSES
 from data import BaseTransform
 import torch.utils.data as data
 from telegram_alerter import send_eval_finished
@@ -60,6 +61,8 @@ parser.add_argument('--network_size', default=512, type=int,
                     help='SSD network size (only 300, 512 and 1024 are supported)')
 parser.add_argument('--test_set', default='test', type=str,
                     help='TT100K test set name')
+parser.add_argument('--send_message', default=False, type=str2bool,
+                    help='Send evaluation results via telegram')
 args = parser.parse_args()
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -104,6 +107,14 @@ elif args.dataset == 'TT100K':
     dataset_path = TT100K_ROOT
     dataset_mean = (104, 117, 123)
     set_type = 'test'
+elif args.dataset == 'TT100K45':
+    annopath = os.path.join(TT100K45_ROOT, 'annotations_45cls', '%s.xml')
+    imgpath = os.path.join(TT100K45_ROOT, 'all_img', '%s.jpg')
+    test_set = 'test_45.txt'
+    imgsetpath = os.path.join(TT100K45_ROOT, test_set)
+    dataset_path = TT100K45_ROOT
+    dataset_mean = (104, 117, 123)
+    set_type = 'test'
 else:
     raise Exception('Please specify correct dataset name!')
 
@@ -131,6 +142,9 @@ class Timer(object):
             return self.average_time
         else:
             return self.diff
+
+    def return_average(self):
+        return self.average_time
 
 
 def parse_rec(filename):
@@ -226,7 +240,8 @@ def do_python_eval(output_dir='output', use_07=True):
     print('Results computed with the **unofficial** Python eval code.')
     print('Results should be very close to the official MATLAB eval code.')
     print('--------------------------------------------------------------')
-    send_eval_finished(weight_info[0], weight_info[1], weight_info[2], weight_info[3], weight_info[4], aps)
+    if args.send_message:
+        send_eval_finished(weight_info[0], weight_info[1], weight_info[2], weight_info[3], weight_info[4], aps)
 
 
 def voc_ap(rec, prec, use_07_metric=True):
@@ -447,6 +462,8 @@ def test_net(net, cuda, dataset, transform, top_k,
     with open(det_file, 'wb') as f:
         pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
 
+    print(f'Finished detection. average FPS = {1. / _t["im_detect"].return_average():0.2f} FPS')
+
     print('Evaluating detections')
     evaluate_detections(all_boxes, output_dir, dataset)
 
@@ -477,6 +494,9 @@ if __name__ == '__main__':
     elif args.dataset == 'TT100K':
         labelmap = TT100K_CLASSES
         dataset_root = TT100K_ROOT
+    elif args.dataset == 'TT100K45':
+        labelmap = TT100K45_CLASSES
+        dataset_root = TT100K45_ROOT
     else:
         raise Exception('Please specify correct dataset name!')
     num_classes = len(labelmap) + 1                      # +1 for background
@@ -487,11 +507,11 @@ if __name__ == '__main__':
 
     weight_info = args.trained_model.split('/')[-1].split('_')
     if weight_info[3] == 'kmeans' or weight_info[3] == 'kmeansarea':
-        assert os.getenv('SSD_USE_KMEANS') == "True"
+        assert os.getenv('SSD_USE_KMEANS') is not None
     elif args.dataset == 'VOC':
         assert VOC_CONV4_3_SIZE == float(weight_info[3])
         assert VOC_NETWORK_SIZE == int(weight_info[0])
-    elif args.dataset == 'TT100K':
+    elif args.dataset == 'TT100K' or args.dataset == 'TT100K45':
         assert TT100K_CONV4_3_SIZE == float(weight_info[3])
         assert TT100K_NETWORK_SIZE == int(weight_info[0])
 
@@ -504,6 +524,10 @@ if __name__ == '__main__':
         dataset = TT100KDetection(dataset_root, args.test_set,
                                   BaseTransform(args.network_size, dataset_mean),
                                   TT100KAnnotationTransform())
+    elif args.dataset == 'TT100K45':
+        dataset = TT100K45Detection(dataset_root, args.test_set,
+                                    BaseTransform(args.network_size, dataset_mean),
+                                    TT100K45AnnotationTransform())
     if args.cuda:
         net = net.cuda()
     # evaluation
