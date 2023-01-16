@@ -61,7 +61,7 @@ parser.add_argument('--network_size', default=512, type=int,
                     help='SSD network size (only 300, 512 and 1024 are supported)')
 parser.add_argument('--test_set', default='test', type=str,
                     help='TT100K test set name')
-parser.add_argument('--send_message', default=False, type=str2bool,
+parser.add_argument('--send_message', default=True, type=str2bool,
                     help='Send evaluation results via telegram')
 args = parser.parse_args()
 
@@ -525,7 +525,7 @@ if __name__ == '__main__':
                                   BaseTransform(args.network_size, dataset_mean),
                                   TT100KAnnotationTransform())
     elif args.dataset == 'TT100K45':
-        dataset = TT100K45Detection(dataset_root, args.test_set,
+        dataset = TT100K45Detection(dataset_root, 'test_45',
                                     BaseTransform(args.network_size, dataset_mean),
                                     TT100K45AnnotationTransform())
     if args.cuda:

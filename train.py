@@ -236,7 +236,7 @@ def train():
 
     # lr warming up
     lr_warm_up_timer = 0
-    if args.dataset == 'VOC':
+    if args.dataset == 'VOC' or args.dataset == 'TT100K45':
         lr_warm_up_timer = warm_up_target - args.start_iter + 1
         print(f'Learning rate warming up until iteration {warm_up_target}')
 
@@ -314,7 +314,7 @@ def train():
                 send_train_error()
                 raise Exception(f'seed {SEED} is not promising. try another.')
 
-        if iteration != 0 and iteration % 10000 == 0:
+        if iteration != 0 and iteration % 40000 == 0:
             print('Saving state, iter:', iteration)
             weight_path = args.save_folder + args.weight_name + '_' + repr(iteration)
             while os.path.isfile(weight_path + '.pth'):
